@@ -5,4 +5,4 @@
  * STEP 2: Paste your HuggingFace Space URL below
  * STEP 3: Deploy frontend/ to Vercel
  */
-window.BACKEND_URL = 'https://rajeshragi-project.hf.space';
+window.BACKEND_URL = 'https://rajeshragi-final.hf.space';
