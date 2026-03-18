@@ -7,8 +7,6 @@
 <title>PFT-AST · Analyze</title>
 <link rel="manifest" href="/manifest.json"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.4/dist/speech-commands.min.js"></script>
 <link rel="stylesheet" href="/app.css">
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
@@ -59,26 +57,24 @@
         </div>
         <input type="file" id="audioIn" accept="audio/*" hidden>
         <div class="file-chip" id="fileChip"><span class="fc-icon">♪</span><div class="fc-info"><div class="fc-name" id="fcName">—</div><div class="fc-size" id="fcSize">—</div></div><button class="fc-rm" onclick="clearFile()">✕</button></div>
-        <div id="prescreenStatus" style="font-size:10px;color:var(--t3);min-height:14px;margin-bottom:6px;letter-spacing:1px"></div>
         <button class="btn-primary" onclick="analyzeUpload()"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3,2 12,6.5 3,11"/></svg> Analyze Audio</button>
       </div>
       <div class="tab-pane" id="pane-record">
         <div class="rec-mode-tabs">
-          <button class="rec-mode-btn on" id="modeSnap" onclick="switchRecMode('snap')">Single Shot</button>
-          <button class="rec-mode-btn" id="modeLive" onclick="switchRecMode('live')">Continuous Live</button>
+          <button class="rec-mode-btn on" id="modeSnap" onclick="switchRecMode('snap')">&#x1F4F7; Single Shot</button>
+          <button class="rec-mode-btn"    id="modeLive" onclick="switchRecMode('live')">&#x1F534; Continuous Live</button>
         </div>
         <div id="recModeSnap">
-        <div class="rec-wrap">
-          <div class="rec-viz"><canvas id="recC"></canvas><div class="rec-viz-lbl" id="recVizLbl">Ready</div></div>
-          <div class="rec-timer" id="recTimer">00:00</div>
-          <div class="rec-btns">
-            <button class="btn-rec" id="btnRec" onclick="toggleRec()"><span class="rec-blinker"></span><span id="recBtnLbl">Record</span></button>
-            <button class="btn-analyze-r" id="btnAnalyzeRec" onclick="analyzeRec()" disabled><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><polygon points="2,1 11,6 2,11"/></svg> Analyze</button>
+          <div class="rec-wrap">
+            <div class="rec-viz"><canvas id="recC"></canvas><div class="rec-viz-lbl" id="recVizLbl">Ready</div></div>
+            <div class="rec-timer" id="recTimer">00:00</div>
+            <div class="rec-btns">
+              <button class="btn-rec" id="btnRec" onclick="toggleRec()"><span class="rec-blinker"></span><span id="recBtnLbl">Record</span></button>
+              <button class="btn-analyze-r" id="btnAnalyzeRec" onclick="analyzeRec()" disabled><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><polygon points="2,1 11,6 2,11"/></svg> Analyze</button>
+            </div>
+            <p style="font-size:9px;color:var(--t3);text-align:center;margin-top:4px">Max 60s &#183; Analyze manually after stop</p>
           </div>
-          <p style="font-size:9px;color:var(--t3);text-align:center;margin-top:4px">Max 60 seconds · Analysis sent to server, dashboard updates everywhere</p>
-        </div><!-- /recModeSnap -->
-
-        <!-- Continuous Live Mode -->
+        </div>
         <div id="recModeLive" style="display:none">
           <div class="rec-wrap">
             <div class="rec-viz"><canvas id="recCLive"></canvas><div class="rec-viz-lbl" id="recVizLblLive">Ready for live analysis</div></div>
@@ -86,43 +82,15 @@
               <span class="live-dot"></span><span id="liveChunkLabel">Starting...</span>
             </div>
             <div style="display:flex;justify-content:center;margin:10px 0">
-              <button class="btn-live-rec" id="btnLiveRec" onclick="startLiveRec()">Start Live Analysis</button>
+              <button class="btn-live-rec" id="btnLiveRec" onclick="startLiveRec()">&#x1F534; Start Live Analysis</button>
             </div>
-            <p style="font-size:10px;color:var(--t3);text-align:center">
-              Splits mic into <b>10-second chunks</b> · Analyzes continuously · Threat = instant ntfy alert
-            </p>
-            <div class="live-chunk-hdr"><span>Live Analysis Stream</span></div>
+            <p style="font-size:10px;color:var(--t3);text-align:center"><b>10s chunks</b> &#183; Auto-analyzed &#183; Threat &#8594; instant ntfy alert</p>
+            <div class="live-chunk-hdr"><span>Live Stream</span></div>
             <div class="live-chunk-feed" id="liveChunkFeed">
-              <div style="padding:12px;font-size:11px;color:var(--t3)">Chunks appear here as analyzed...</div>
+              <div style="padding:10px;font-size:11px;color:var(--t3)">Chunks appear here once analyzed...</div>
             </div>
-          </div>
-        </div><!-- /recModeLive -->
-      </div><!-- /pane-record -->
-    </div><!-- card -->
-
-
-    <!-- Live streaming threat meter (shown during recording) -->
-    <div class="card" id="streamCard" style="display:none;margin-bottom:12px">
-      <div class="card-hd" style="padding:14px 16px 0">
-        <span class="card-title">LIVE THREAT MONITOR</span>
-        <span style="font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(0,229,255,.1);color:var(--teal);margin-left:8px" id="streamStatus">LISTENING</span>
-      </div>
-      <div class="card-sub">Real-time threat score every 2 seconds · No upload needed</div>
-      <div style="padding:10px 16px 14px">
-        <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
-          <div style="text-align:center">
-            <div style="font-family:'Orbitron',sans-serif;font-size:36px;font-weight:700;line-height:1" id="streamScore">—</div>
-            <div style="font-size:9px;color:var(--t3);letter-spacing:1px;margin-top:2px">THREAT SCORE</div>
-          </div>
-          <div style="flex:1">
-            <div class="thr-bg" style="height:8px;border-radius:4px;margin-bottom:6px">
-              <div id="streamBar" class="thr-fill" style="width:0%;height:100%;border-radius:4px;transition:width .4s,background .4s"></div>
-            </div>
-            <div id="streamRisk" style="font-size:11px;font-weight:600;color:var(--t3)">WAITING...</div>
-            <div id="streamClass" style="font-size:10px;color:var(--t3);margin-top:2px">—</div>
           </div>
         </div>
-        <div id="streamHistory" style="display:flex;gap:4px;align-items:flex-end;height:32px"></div>
       </div>
     </div>
 
@@ -151,15 +119,7 @@
 
 <div class="loader" id="loader"><div class="loader-box"><div class="sonar"><div class="s-ring"></div><div class="s-ring"></div><div class="s-ring"></div><div class="s-core"></div></div><div class="loader-title">Analyzing with PFT-AST</div><div class="loader-msg" id="loaderMsg">Uploading audio...</div><div class="loader-timer" id="loaderTimer"></div></div></div>
 
-<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()">
-  <div class="hist-modal-inner">
-    <div class="hist-modal-topbar">
-      <div style="font-size:13px;font-weight:700">Full Analysis Report</div>
-      <button class="hist-modal-close" onclick="closeHistoryModal()">X Close</button>
-    </div>
-    <div class="hist-modal-body" id="histModalBody"></div>
-  </div>
-</div>
+<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()"><div class="hist-modal-inner"><div class="hist-modal-topbar"><span style="font-size:13px;font-weight:700;color:var(--t1)">Full Analysis Report</span><button class="hist-modal-close" onclick="closeHistoryModal()">&#x2715; Close</button></div><div class="hist-modal-body" id="histModalBody"></div></div></div>
 <script src="/config.js"></script>
 <script src="/app.js"></script>
 <script>window.PAGE='analyze'; initPage();</script>

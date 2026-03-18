@@ -82,20 +82,6 @@
 </header>
 
 <main class="main">
-  <div class="paper-metrics-bar">
-    <div class="pm-item"><span class="pm-val">0.88</span><span class="pm-lbl">Macro-F1</span></div>
-    <div class="pm-sep"></div>
-    <div class="pm-item"><span class="pm-val">0.962</span><span class="pm-lbl">AUC</span></div>
-    <div class="pm-sep"></div>
-    <div class="pm-item"><span class="pm-val">3.2%</span><span class="pm-lbl">FAR</span></div>
-    <div class="pm-sep"></div>
-    <div class="pm-item"><span class="pm-val">0.98</span><span class="pm-lbl">Recall</span></div>
-    <div class="pm-sep"></div>
-    <div class="pm-item"><span class="pm-val">τ = 0.75</span><span class="pm-lbl">Threshold</span></div>
-    <div class="pm-sep"></div>
-    <div class="pm-item pm-arch"><span class="pm-val">L1–6 Frozen · L7–12 Fine-tuned</span><span class="pm-lbl">PFT Architecture</span></div>
-  </div>
-
   <div id="modelBanner" class="model-banner loading" style="display:none;padding:10px 16px;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:1px;margin-bottom:12px;"></div>
   <!-- Alert banner -->
   <div class="alert-banner" id="alertBanner">
@@ -168,6 +154,17 @@
 <!-- Loader -->
 <div class="loader" id="loader"><div class="loader-box"><div class="sonar"><div class="s-ring"></div><div class="s-ring"></div><div class="s-ring"></div><div class="s-core"></div></div><div class="loader-title">Analyzing with PFT-AST</div><div class="loader-msg" id="loaderMsg">Uploading audio...</div><div class="loader-timer" id="loaderTimer"></div></div></div>
 
+
+<!-- History full-analysis modal -->
+<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()">
+  <div class="hist-modal-inner">
+    <div class="hist-modal-topbar">
+      <span style="font-size:13px;font-weight:700;color:var(--t1)">Full Analysis Report</span>
+      <button class="hist-modal-close" onclick="closeHistoryModal()">&#x2715; Close</button>
+    </div>
+    <div class="hist-modal-body" id="histModalBody"></div>
+  </div>
+</div>
 <script src="/config.js"></script>
 <script src="/app.js"></script>
 <script>window.PAGE='dashboard'; initPage();</script>

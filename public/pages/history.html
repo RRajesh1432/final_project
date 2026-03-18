@@ -42,15 +42,7 @@
 </main>
 </div>
 
-<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()">
-  <div class="hist-modal-inner">
-    <div class="hist-modal-topbar">
-      <div style="font-size:13px;font-weight:700">Full Analysis Report</div>
-      <button class="hist-modal-close" onclick="closeHistoryModal()">X Close</button>
-    </div>
-    <div class="hist-modal-body" id="histModalBody"></div>
-  </div>
-</div>
+<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()"><div class="hist-modal-inner"><div class="hist-modal-topbar"><span style="font-size:13px;font-weight:700;color:var(--t1)">Full Analysis Report</span><button class="hist-modal-close" onclick="closeHistoryModal()">&#x2715; Close</button></div><div class="hist-modal-body" id="histModalBody"></div></div></div>
 <script src="/config.js"></script>
 <script src="/app.js"></script><script>window.PAGE='history'; initPage();</script>
 </body>
