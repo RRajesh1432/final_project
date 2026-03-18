@@ -21,6 +21,15 @@ let _actx = null, _analyser = null, _raf = null;
 let _feedCt = 0, _alertCt = 0, _subbed = false;
 let _deferredInstall = null;
 
+// Added globals for device tracking, ntfy, live recording, model polling
+let _deviceId     = null;
+let _userLocation = null;
+let _liveActive   = false;
+let _liveStream   = null;
+let _liveChunkN   = 0;
+let _modelReady   = false;
+let _modelPollInt = null;
+
 // ═══════════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
@@ -1046,7 +1055,6 @@ function fmtBytes(n) {
 //  Polls /api/status every 5s until model is ready.
 //  Shows a banner while loading; enables Analyze button when ready.
 // ═══════════════════════════════════════════════════════════════
-let _modelReady = false;
 let _modelPollTimer = null;
 
 function startModelPoll() {
