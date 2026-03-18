@@ -21,7 +21,7 @@
  * that replaces the placeholder below).
  */
 
-window.BACKEND_URL = '';   // <- paste your Railway / HuggingFace URL here
+window.BACKEND_URL = ''https://rajeshragi-final.hf.space';   // <- paste your Railway / HuggingFace URL here
 
 /**
  * MODEL LOADING POLL
