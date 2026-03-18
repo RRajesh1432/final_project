@@ -854,7 +854,9 @@ function initLocalise() {
 
   if (_regCanvas) {
     _regCanvas.addEventListener('click', onRegMapClick);
-    drawRegMap();
+    // Delay so DOM finishes rendering and offsetWidth is correct
+    setTimeout(drawRegMap, 100);
+    window.addEventListener('resize', drawRegMap);
   }
 
   loadDevices();
@@ -879,10 +881,14 @@ function onRegMapClick(e) {
 
 function drawRegMap() {
   if (!_regCanvas) return;
-  const W = _regCanvas.offsetWidth  || 300;
-  const H = _regCanvas.offsetHeight || 160;
+  // Force dimensions from parent wrap so canvas always has a size
+  const wrap = document.getElementById('regMapWrap');
+  const W = (wrap ? wrap.offsetWidth  : _regCanvas.offsetWidth)  || 400;
+  const H = (wrap ? wrap.offsetHeight : _regCanvas.offsetHeight) || 160;
   _regCanvas.width  = W * devicePixelRatio;
   _regCanvas.height = H * devicePixelRatio;
+  _regCanvas.style.width  = W + 'px';
+  _regCanvas.style.height = H + 'px';
   const ctx = _regCanvas.getContext('2d');
   ctx.scale(devicePixelRatio, devicePixelRatio);
 
