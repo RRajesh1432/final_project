@@ -314,7 +314,7 @@ function renderDash(data) {
   renderSpec(data.spectrogram);
   renderClasses(data.all_sounds, 'clsList', 12);
   drawProbChart(data.frames);
-  renderThrBreak(data.multi_threat);
+  renderThrBreak(data.threat_detail || data.multi_threat);
   renderTimeline(data.frames);
 }
 
@@ -420,15 +420,93 @@ function showResult(data) {
   card.style.display = 'block';
   const pct  = (data.threat_score*100).toFixed(1)+'%';
   const risk = data.risk || (data.threat_detected ? 'HIGH' : 'SAFE');
+
+  // ── Result summary card ──────────────────────────────────
   set('resPct', pct);
   const rt = document.getElementById('resRisk');
   if (rt) { rt.textContent = risk; rt.className = 'rtag r-' + risk.toLowerCase(); }
   drawMiniGauge('resGauge', data.threat_score);
-  renderClasses(data.all_sounds, 'resClasses', 6);
+
+  // Detection method label
+  const det = document.getElementById('resDetectedVia');
+  if (det && data.threat_detected) {
+    det.textContent = `Detected via: Score_t=${(data.threat_score).toFixed(3)}>=${data.threshold||0.25}`;
+    det.style.display = 'block';
+  } else if (det) { det.style.display = 'none'; }
+
+  // Cache hit badge
+  const ch = document.getElementById('resCacheHit');
+  if (ch) { ch.style.display = data.cache_hit ? 'inline-flex' : 'none'; }
+
+  // Top 10 classes
+  renderClasses(data.all_sounds, 'resClasses', 10);
+
+  // ── Full analysis panels ─────────────────────────────────
+  const full = document.getElementById('fullResult');
+  if (full) full.style.display = 'block';
+
+  // Spectrogram
   const sp = document.getElementById('resSpec');
-  if (sp && data.spectrogram) { sp.src = `data:image/png;base64,${data.spectrogram}`; sp.style.display = 'block'; }
+  if (sp && data.spectrogram) { sp.src = `data:image/png;base64,${data.spectrogram}`; sp.style.display='block'; }
+
+  // Waveform
+  const wv = document.getElementById('resWave');
+  if (wv && data.waveform_img) { wv.src = `data:image/png;base64,${data.waveform_img}`; wv.style.display='block'; }
+
+  // Threat class scores (5 bars)
+  renderThreatDetail(data.threat_detail || data.multi_threat);
+
+  // Audio metadata
+  renderAudioMeta(data);
+
+  // Temporal segments
+  renderTemporalFrames(data.frames);
+
   card.scrollIntoView({ behavior: 'smooth' });
   if (data.threat_detected) showBanner(data);
+}
+
+function renderThreatDetail(threats) {
+  const el = document.getElementById('resThrDetail'); if (!el || !threats) return;
+  const TAU_DISPLAY = 0.25; // base model threshold
+  el.innerHTML = threats.map(t => {
+    const pct   = t.pct !== undefined ? t.pct : (t.score||0)*100;
+    const label = t.class || t.label || '—';
+    const cls   = pct >= 25 ? 'high' : pct >= 10 ? 'med' : 'low';
+    const flag  = pct >= TAU_DISPLAY*100;
+    return `<div class="thr-detail-row">
+      <div class="thr-detail-hd">
+        <span class="thr-detail-name">${label}</span>
+        <span class="thr-detail-pct ${flag?'flag':''}">${pct.toFixed(1)}%</span>
+      </div>
+      <div class="thr-detail-bar-bg">
+        <div class="thr-detail-bar ${cls}" style="width:${Math.min(pct,100)}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAudioMeta(data) {
+  const el = document.getElementById('resAudioMeta'); if (!el) return;
+  el.innerHTML = `
+    <div class="meta-tile"><div class="meta-tile-val">${data.duration||'—'}s</div><div class="meta-tile-lbl">DURATION</div></div>
+    <div class="meta-tile"><div class="meta-tile-val">${data.sample_rate||16000}</div><div class="meta-tile-lbl">SAMPLE RATE</div></div>
+    <div class="meta-tile"><div class="meta-tile-val">${data.all_sounds?.length||527}</div><div class="meta-tile-lbl">CLASSES</div></div>
+    <div class="meta-tile"><div class="meta-tile-val thr">${(data.threshold||0.25).toFixed(2)}</div><div class="meta-tile-lbl">THRESHOLD &tau;</div></div>`;
+}
+
+function renderTemporalFrames(frames) {
+  const el = document.getElementById('resFrames'); if (!el || !frames) return;
+  el.innerHTML = frames.map(f => {
+    const pct = (f.threat_score*100).toFixed(1);
+    const isThr = f.is_threat || f.threat_score >= 0.25;
+    return `<div class="seg-card ${isThr?'threat':''}">
+      <div class="seg-time">${f.start}s &ndash; ${f.end}s</div>
+      <div class="seg-label ${isThr?'threat':''}">${f.label}</div>
+      <div class="seg-score ${isThr?'threat':''}">${pct}%</div>
+      ${isThr ? '<div class="seg-badge threat">&#x26A0; THREAT</div>' : '<div class="seg-badge safe">&#x2713; Safe</div>'}
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════════════

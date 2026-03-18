@@ -96,25 +96,75 @@
 
     <!-- Result card -->
     <div class="card" id="resultCard" style="display:none">
-      <div class="card-hd" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0">
-        <span class="card-title">ANALYSIS RESULT</span>
-        <span id="resRisk" class="rtag r-safe">—</span>
-      </div>
-      <div class="card-sub" style="margin-top:4px">Saved to database · Dashboard updated live</div>
-      <div style="padding:14px 16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <div><div style="font-size:8px;color:var(--t3);letter-spacing:2px;text-transform:uppercase">Threat Score</div><div style="font-family:'Orbitron',sans-serif;font-size:36px;font-weight:700;color:var(--t1);line-height:1" id="resPct">—</div></div>
-          <canvas id="resGauge" width="84" height="84"></canvas>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0">
+        <span class="card-title">RESULT SUMMARY</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="resCacheHit" style="display:none;font-size:9px;font-weight:700;padding:3px 8px;border-radius:10px;background:#D1FAE5;color:#059669">&#x26A1; INSTANT (CACHED)</span>
+          <span id="resRisk" class="rtag r-safe">SAFE</span>
         </div>
-        <div id="resClasses" style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px"></div>
-        <img id="resSpec" style="width:100%;border-radius:8px;display:none" alt="spectrogram">
-        <div style="font-size:9px;color:var(--t3);margin-top:10px;text-align:center">
-          Results broadcast to all connected devices · <a href="/" style="color:var(--teal);text-decoration:none">View Dashboard ↗</a>
+      </div>
+      <div style="font-size:10px;color:var(--t3);padding:2px 16px 12px">Analysis saved &middot; Dashboard updated &middot; Notifications sent if threat</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0 16px 14px">
+        <!-- Gauge + score -->
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="position:relative;width:90px;height:90px;flex-shrink:0">
+            <canvas id="resGauge" width="90" height="90"></canvas>
+          </div>
+          <div>
+            <div style="font-size:9px;letter-spacing:2px;color:var(--t3);text-transform:uppercase">Threat Score</div>
+            <div style="font-size:38px;font-weight:800;line-height:1;color:var(--t1)" id="resPct">—</div>
+            <div style="font-size:9px;color:var(--t3);margin-top:4px">&tau;_base = 0.25 &middot; &tau;_paper = 0.75</div>
+            <div id="resDetectedVia" style="display:none;margin-top:5px;font-size:9px;font-weight:700;color:var(--red);background:#FEF2F2;border-radius:4px;padding:3px 8px"></div>
+          </div>
+        </div>
+        <!-- Top 10 classes -->
+        <div>
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--t3);text-transform:uppercase;margin-bottom:6px">TOP 10 CLASSES</div>
+          <div id="resClasses"></div>
         </div>
       </div>
     </div>
-  </div>
-</main>
+
+    <!-- Full analysis panels (shown after analysis) -->
+    <div id="fullResult" style="display:none">
+
+      <!-- Spectrogram + Waveform -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card">
+          <div class="card-hd"><span class="card-title">LOG-MEL SPECTROGRAM</span></div>
+          <div style="font-size:9px;color:var(--t3);padding:2px 16px 8px">128 mel bands &middot; viridis colormap</div>
+          <div style="padding:0 16px 14px"><img id="resSpec" style="width:100%;border-radius:6px;display:none" alt="spectrogram"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-title">WAVEFORM</span></div>
+          <div style="font-size:9px;color:var(--t3);padding:2px 16px 8px">Normalized amplitude &middot; 16 kHz</div>
+          <div style="padding:0 16px 14px"><img id="resWave" style="width:100%;border-radius:6px;display:none" alt="waveform"></div>
+        </div>
+      </div>
+
+      <!-- Threat class scores + Metadata -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card">
+          <div class="card-hd"><span class="card-title">THREAT CLASS SCORES</span></div>
+          <div style="font-size:9px;color:var(--t3);padding:2px 16px 8px">5-class threat set &middot; Score_t(x) = max p(c|x)</div>
+          <div id="resThrDetail" style="padding:0 16px 14px"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-title">AUDIO METADATA</span></div>
+          <div style="font-size:9px;color:var(--t3);padding:2px 16px 8px">Signal properties</div>
+          <div id="resAudioMeta" style="padding:0 16px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+        </div>
+      </div>
+
+      <!-- Temporal segments -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-hd"><span class="card-title">TEMPORAL SEGMENT BREAKDOWN &mdash; 5 FRAMES</span></div>
+        <div style="font-size:9px;color:var(--t3);padding:2px 16px 8px">Each segment independently classified &middot; red = threat detected</div>
+        <div id="resFrames" style="padding:0 16px 14px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
+      </div>
+
+    </div></main>
 </div>
 
 <div class="loader" id="loader"><div class="loader-box"><div class="sonar"><div class="s-ring"></div><div class="s-ring"></div><div class="s-ring"></div><div class="s-core"></div></div><div class="loader-title">Analyzing with PFT-AST</div><div class="loader-msg" id="loaderMsg">Uploading audio...</div><div class="loader-timer" id="loaderTimer"></div></div></div>
