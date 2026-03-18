@@ -7,6 +7,8 @@
 <title>PFT-AST · Analyze</title>
 <link rel="manifest" href="/manifest.json"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.4/dist/speech-commands.min.js"></script>
 <link rel="stylesheet" href="/app.css">
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
@@ -57,6 +59,7 @@
         </div>
         <input type="file" id="audioIn" accept="audio/*" hidden>
         <div class="file-chip" id="fileChip"><span class="fc-icon">♪</span><div class="fc-info"><div class="fc-name" id="fcName">—</div><div class="fc-size" id="fcSize">—</div></div><button class="fc-rm" onclick="clearFile()">✕</button></div>
+        <div id="prescreenStatus" style="font-size:10px;color:var(--t3);min-height:14px;margin-bottom:6px;letter-spacing:1px"></div>
         <button class="btn-primary" onclick="analyzeUpload()"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3,2 12,6.5 3,11"/></svg> Analyze Audio</button>
       </div>
       <div class="tab-pane" id="pane-record">
@@ -69,6 +72,32 @@
           </div>
           <p style="font-size:9px;color:var(--t3);text-align:center;margin-top:4px">Max 60 seconds · Analysis sent to server, dashboard updates everywhere</p>
         </div>
+      </div>
+    </div>
+
+  
+    <!-- Live streaming threat meter (shown during recording) -->
+    <div class="card" id="streamCard" style="display:none;margin-bottom:12px">
+      <div class="card-hd" style="padding:14px 16px 0">
+        <span class="card-title">LIVE THREAT MONITOR</span>
+        <span style="font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(0,229,255,.1);color:var(--teal);margin-left:8px" id="streamStatus">LISTENING</span>
+      </div>
+      <div class="card-sub">Real-time threat score every 2 seconds · No upload needed</div>
+      <div style="padding:10px 16px 14px">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+          <div style="text-align:center">
+            <div style="font-family:'Orbitron',sans-serif;font-size:36px;font-weight:700;line-height:1" id="streamScore">—</div>
+            <div style="font-size:9px;color:var(--t3);letter-spacing:1px;margin-top:2px">THREAT SCORE</div>
+          </div>
+          <div style="flex:1">
+            <div class="thr-bg" style="height:8px;border-radius:4px;margin-bottom:6px">
+              <div id="streamBar" class="thr-fill" style="width:0%;height:100%;border-radius:4px;transition:width .4s,background .4s"></div>
+            </div>
+            <div id="streamRisk" style="font-size:11px;font-weight:600;color:var(--t3)">WAITING...</div>
+            <div id="streamClass" style="font-size:10px;color:var(--t3);margin-top:2px">—</div>
+          </div>
+        </div>
+        <div id="streamHistory" style="display:flex;gap:4px;align-items:flex-end;height:32px"></div>
       </div>
     </div>
 

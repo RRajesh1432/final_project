@@ -1205,3 +1205,579 @@ async function submitLocEvent(analysisId, score, topClass) {
     });
   } catch(_) {}
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+//  FEATURE: CLIENT-SIDE PRE-SCREENING (TensorFlow.js)
+//  Runs a tiny speech-commands model locally in the browser.
+//  If threat probability < 0.1 on the local model, skips server
+//  and returns "safe" instantly — saving 3-5s per analysis.
+// ═══════════════════════════════════════════════════════════════
+
+let _tfModel    = null;
+let _tfLoading  = false;
+let _tfReady    = false;
+
+const PRESCREEN_THRESHOLD = 0.10;   // below this → skip server
+const PRESCREEN_CLASSES   = ['_unknown_', 'noise', 'background'];  // safe classes
+
+async function loadTFModel() {
+  if (_tfReady || _tfLoading) return;
+  if (typeof speechCommands === 'undefined') return;  // script not loaded
+  _tfLoading = true;
+  try {
+    _tfModel = speechCommands.create('BROWSER_FFT');
+    await _tfModel.ensureModelLoaded();
+    _tfReady = true;
+    console.log('[prescreen] TF.js model ready');
+  } catch(e) {
+    console.warn('[prescreen] TF.js load failed:', e.message);
+  } finally {
+    _tfLoading = false;
+  }
+}
+
+async function prescreenAudio(file) {
+  /**
+   * Returns {skip: true} if audio is obviously safe (local model says < threshold).
+   * Returns {skip: false} if uncertain — must send to server.
+   * Always returns {skip: false} if TF model not ready.
+   */
+  const stEl = document.getElementById('prescreenStatus');
+  if (!_tfReady || !_tfModel) return { skip: false };
+
+  try {
+    if (stEl) stEl.textContent = 'Pre-screening locally...';
+
+    const arrayBuf = await file.arrayBuffer();
+    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    const decoded  = await audioCtx.decodeAudioData(arrayBuf);
+    const samples  = decoded.getChannelData(0);
+
+    // Speech commands model expects Float32Array of 16000 samples (1s)
+    const clip = samples.slice(0, Math.min(samples.length, 16000));
+    const tensor = tf.tensor(clip).expandDims(0);
+
+    const result = await _tfModel.recognize(tensor);
+    tensor.dispose();
+    audioCtx.close();
+
+    const scores = result.scores;
+    const labels = _tfModel.wordLabels();
+    const maxIdx = scores.indexOf(Math.max(...scores));
+    const maxLbl = labels[maxIdx] || '';
+    const maxScr = scores[maxIdx];
+
+    const isSafeClass = PRESCREEN_CLASSES.some(c => maxLbl.toLowerCase().includes(c));
+    const skip = isSafeClass && maxScr > 0.85;
+
+    if (stEl) {
+      stEl.textContent = skip
+        ? `Pre-screen: safe (${maxLbl}, ${(maxScr*100).toFixed(0)}%) — skipping server`
+        : `Pre-screen: uncertain — sending to server...`;
+      stEl.style.color = skip ? '#00e676' : 'var(--t3)';
+    }
+    return { skip, label: maxLbl, score: maxScr };
+
+  } catch(e) {
+    if (stEl) stEl.textContent = '';
+    return { skip: false };
+  }
+}
+
+// Patch analyzeUpload to pre-screen first
+const _origAnalyzeUpload = window.analyzeUpload;
+
+async function analyzeUpload() {
+  const inp = document.getElementById('audioIn');
+  if (!inp?.files[0]) { alert('Select an audio file first.'); return; }
+  if (!_modelReady) { alert('Model is still loading. Please wait 1-2 minutes.'); return; }
+
+  // Try pre-screening
+  const ps = await prescreenAudio(inp.files[0]);
+  if (ps.skip) {
+    // Show instant safe result without hitting server
+    showResult({
+      threat_score:    0,
+      threat_detected: false,
+      risk:            'SAFE',
+      all_sounds:      [{ label: ps.label, score: ps.score }],
+      spectrogram:     null,
+      cache_hit:       false,
+      prescreened:     true,
+    });
+    return;
+  }
+
+  // Normal server path
+  showLoader('Analyzing with PFT-AST...');
+  const fd = new FormData();
+  fd.append('audio', inp.files[0]);
+  fd.append('source', 'upload');
+  try {
+    const r    = await fetch(API + '/api/predict', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) {
+      if (r.status === 503) { alert('Model is still loading. Please wait and retry.'); return; }
+      alert('Error: ' + (data.error || r.statusText)); return;
+    }
+    if (data.cache_hit) showCacheBadge();
+    showResult(data);
+    if (data.threat_detected) submitLocEvent(data.id, data.threat_score, data.all_sounds?.[0]?.label);
+  } catch(e) { alert('Network error: ' + e.message); }
+  finally { hideLoader(); }
+}
+
+function showCacheBadge() {
+  const el = document.getElementById('resultCard');
+  if (!el) return;
+  const badge = document.createElement('div');
+  badge.style.cssText = 'font-size:9px;letter-spacing:2px;color:#ffc107;margin:0 16px 8px;padding:4px 8px;background:rgba(255,193,7,.08);border-radius:4px;border:1px solid rgba(255,193,7,.2)';
+  badge.textContent = '⚡ INSTANT RESULT — This file was analyzed before (cache hit)';
+  el.insertBefore(badge, el.children[2]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FEATURE: WEBM STREAMING (live threat score during recording)
+//  Every 2 seconds of recording, sends the accumulated audio
+//  chunk to /api/predict/stream and shows a live threat score.
+// ═══════════════════════════════════════════════════════════════
+
+let _streamChunks  = [];   // running buffer for streaming
+let _streamIdx     = 0;
+let _streamTimer   = null;
+let _streamHistory = [];   // array of {score, risk} for mini bar chart
+
+function startStreaming() {
+  _streamChunks  = [];
+  _streamIdx     = 0;
+  _streamHistory = [];
+  clearInterval(_streamTimer);
+
+  const card = document.getElementById('streamCard');
+  if (card) card.style.display = 'block';
+  set('streamStatus', 'LISTENING');
+  set('streamScore',  '—');
+  set('streamRisk',   'WAITING...');
+  set('streamClass',  '—');
+  renderStreamHistory();
+
+  // Send chunk every 2 seconds
+  _streamTimer = setInterval(() => {
+    if (_streamChunks.length === 0) return;
+    const blob = new Blob(_streamChunks, { type: getMime() || 'audio/webm' });
+    _streamChunks = [];   // reset buffer (keep growing in _chunks for final analysis)
+    sendStreamChunk(blob, _streamIdx++);
+  }, 2000);
+}
+
+function stopStreaming() {
+  clearInterval(_streamTimer);
+  set('streamStatus', 'DONE');
+}
+
+async function sendStreamChunk(blob, idx) {
+  if (blob.size < 5000) return;  // too small, skip
+  try {
+    const fd = new FormData();
+    fd.append('chunk', blob, `chunk_${idx}.webm`);
+    fd.append('source', 'record_live');
+    fd.append('chunk_idx', idx);
+
+    const r = await fetch(API + '/api/predict/stream', { method: 'POST', body: fd });
+    if (!r.ok) return;
+
+    const reader = r.body.getReader();
+    const dec    = new TextDecoder();
+    let   buf    = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.status === 'ok') updateStreamUI(data);
+        } catch(_) {}
+      }
+    }
+  } catch(e) { console.warn('[stream]', e.message); }
+}
+
+function updateStreamUI(data) {
+  const pct      = Math.round((data.threat_score || 0) * 100);
+  const risk     = data.risk || 'SAFE';
+  const riskColor = risk === 'HIGH' ? '#ff1744' : risk === 'MEDIUM' ? '#ffc107' : '#00e676';
+
+  set('streamScore', pct + '%');
+  const scoreEl = document.getElementById('streamScore');
+  if (scoreEl) scoreEl.style.color = riskColor;
+
+  const bar = document.getElementById('streamBar');
+  if (bar) {
+    bar.style.width      = pct + '%';
+    bar.style.background = riskColor;
+  }
+
+  set('streamRisk',  risk);
+  const riskEl = document.getElementById('streamRisk');
+  if (riskEl) riskEl.style.color = riskColor;
+
+  set('streamClass', data.top_class || '—');
+
+  // Update streaming history bar chart
+  _streamHistory.push({ score: data.threat_score || 0, risk });
+  if (_streamHistory.length > 20) _streamHistory.shift();
+  renderStreamHistory();
+
+  // Flash alert banner if threat detected
+  if (data.threat_detected) {
+    const det = document.getElementById('bannerDetail');
+    if (det) det.textContent = `LIVE: ${(data.top_class || '').toUpperCase()} · ${pct}% · recording`;
+    document.getElementById('alertBanner')?.classList.add('show');
+  }
+
+  set('streamStatus', `CHUNK ${data.chunk_idx + 1}`);
+}
+
+function renderStreamHistory() {
+  const el = document.getElementById('streamHistory');
+  if (!el || !_streamHistory.length) return;
+  const maxH = 32;
+  el.innerHTML = _streamHistory.map(h => {
+    const h2  = Math.max(4, Math.round(h.score * maxH));
+    const col = h.risk === 'HIGH' ? '#ff1744' : h.risk === 'MEDIUM' ? '#ffc107' : '#00e676';
+    return `<div style="flex:1;height:${h2}px;background:${col};border-radius:2px;opacity:0.75;align-self:flex-end"></div>`;
+  }).join('');
+}
+
+// Patch startRec / stopRec to wire in streaming
+const _origStartRec = window.startRec;
+const _origStopRec  = window.stopRec;
+
+async function startRec() {
+  _streamChunks = [];
+  _chunks = []; _blob = null;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true }
+    });
+
+    // AudioContext for waveform viz
+    window._actx    = new AudioContext();
+    window._analyser = window._actx.createAnalyser();
+    window._analyser.fftSize = 512;
+    window._actx.createMediaStreamSource(stream).connect(window._analyser);
+    drawRecWave();
+
+    const mime = getMime();
+    window._mediaRec = new MediaRecorder(stream, { mimeType: mime });
+
+    window._mediaRec.ondataavailable = e => {
+      if (e.data.size > 0) {
+        _chunks.push(e.data);           // for final full analysis
+        _streamChunks.push(e.data);     // for live streaming
+      }
+    };
+
+    window._mediaRec.onstop = () => {
+      _blob = new Blob(_chunks, { type: mime || 'audio/webm' });
+      stopRecViz();
+      stopStreaming();
+      const btn = document.getElementById('btnAnalyzeRec');
+      if (btn) btn.disabled = false;
+      setRecLbl('Ready · ' + window._recSecs + 's recorded');
+    };
+
+    window._mediaRec.start(100);
+    startStreaming();   // start live chunk sending
+
+    window._recSecs = 0;
+    window._timerInt = setInterval(() => {
+      window._recSecs++;
+      const el = document.getElementById('recTimer');
+      if (el) { el.textContent = `${pad(window._recSecs/60|0)}:${pad(window._recSecs%60)}`; el.classList.add('on'); }
+      if (window._recSecs >= 60) stopRec();
+    }, 1000);
+
+    document.getElementById('btnRec')?.classList.add('on');
+    set('recBtnLbl', 'Stop');
+    setRecLbl('● RECORDING');
+  } catch(e) { alert('Mic access denied: ' + e.message); }
+}
+
+function stopRec() {
+  if (window._mediaRec?.state === 'recording') {
+    window._mediaRec.stop();
+    window._mediaRec.stream.getTracks().forEach(t => t.stop());
+  }
+  clearInterval(window._timerInt);
+  stopStreaming();
+  document.getElementById('btnRec')?.classList.remove('on');
+  set('recBtnLbl', 'Record');
+  document.getElementById('recTimer')?.classList.remove('on');
+}
+
+// ── Wire TF.js load into initPage ────────────────────────────
+
+const _origInitPage = window.initPage;
+
+// Start loading TF model immediately on analyze page
+if (document.readyState !== 'loading') {
+  if (window.PAGE === 'analyze') setTimeout(loadTFModel, 1500);
+} else {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.PAGE === 'analyze') setTimeout(loadTFModel, 1500);
+  });
+}
+
+// ── Partial result on dashboard ──────────────────────────────
+
+if (typeof _socket !== 'undefined' && _socket) {
+  _socket.on('partial_result', data => {
+    if (window.PAGE !== 'dashboard') return;
+    const pct = Math.round((data.threat_score || 0) * 100);
+    const riskEl = document.getElementById('gaugeRisk');
+    if (riskEl) riskEl.textContent = `LIVE: ${data.risk} ${pct}%`;
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  FEATURE: CLIENT-SIDE PRE-SCREENING (TensorFlow.js)
+// ═══════════════════════════════════════════════════════════════
+
+let _tfModel   = null;
+let _tfLoading = false;
+let _tfReady   = false;
+
+async function loadTFModel() {
+  if (_tfReady || _tfLoading) return;
+  if (typeof speechCommands === 'undefined') return;
+  _tfLoading = true;
+  try {
+    _tfModel = speechCommands.create('BROWSER_FFT');
+    await _tfModel.ensureModelLoaded();
+    _tfReady = true;
+    console.log('[prescreen] TF.js model ready');
+  } catch(e) {
+    console.warn('[prescreen] TF.js load failed:', e.message);
+  } finally { _tfLoading = false; }
+}
+
+async function prescreenAudio(file) {
+  const stEl = document.getElementById('prescreenStatus');
+  if (!_tfReady || !_tfModel) return { skip: false };
+  try {
+    if (stEl) stEl.textContent = 'Pre-screening locally...';
+    const arrayBuf = await file.arrayBuffer();
+    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    const decoded  = await audioCtx.decodeAudioData(arrayBuf);
+    const samples  = decoded.getChannelData(0);
+    const clip     = samples.slice(0, Math.min(samples.length, 16000));
+    const tensor   = tf.tensor(clip).expandDims(0);
+    const result   = await _tfModel.recognize(tensor);
+    tensor.dispose(); audioCtx.close();
+    const scores   = result.scores;
+    const labels   = _tfModel.wordLabels();
+    const maxIdx   = scores.indexOf(Math.max(...scores));
+    const maxLbl   = labels[maxIdx] || '';
+    const maxScr   = scores[maxIdx];
+    const safeClasses = ['_unknown_', 'noise', 'background'];
+    const skip     = safeClasses.some(c => maxLbl.toLowerCase().includes(c)) && maxScr > 0.85;
+    if (stEl) {
+      stEl.textContent = skip
+        ? 'Pre-screen: safe (' + maxLbl + ', ' + (maxScr*100).toFixed(0) + '%) - skipping server'
+        : 'Pre-screen: uncertain - sending to server...';
+      stEl.style.color = skip ? '#00e676' : 'var(--t3)';
+    }
+    return { skip, label: maxLbl, score: maxScr };
+  } catch(e) { if (stEl) stEl.textContent = ''; return { skip: false }; }
+}
+
+async function analyzeUpload() {
+  const inp = document.getElementById('audioIn');
+  if (!inp?.files[0]) { alert('Select an audio file first.'); return; }
+  if (!_modelReady) { alert('Model is still loading. Please wait 1-2 minutes.'); return; }
+  const ps = await prescreenAudio(inp.files[0]);
+  if (ps.skip) {
+    showResult({ threat_score:0, threat_detected:false, risk:'SAFE',
+                 all_sounds:[{label:ps.label,score:ps.score}],
+                 spectrogram:null, prescreened:true });
+    return;
+  }
+  showLoader('Analyzing with PFT-AST...');
+  const fd = new FormData();
+  fd.append('audio', inp.files[0]); fd.append('source','upload');
+  try {
+    const r    = await fetch(API + '/api/predict', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) {
+      if (r.status === 503) { alert('Model is still loading. Please wait and retry.'); return; }
+      alert('Error: ' + (data.error || r.statusText)); return;
+    }
+    if (data.cache_hit) showCacheBadge();
+    showResult(data);
+    if (data.threat_detected) submitLocEvent(data.id, data.threat_score, data.all_sounds?.[0]?.label);
+  } catch(e) { alert('Network error: ' + e.message); }
+  finally { hideLoader(); }
+}
+
+function showCacheBadge() {
+  const el = document.getElementById('resultCard');
+  if (!el) return;
+  const badge = document.createElement('div');
+  badge.style.cssText = 'font-size:9px;letter-spacing:2px;color:#ffc107;margin:0 16px 8px;padding:4px 8px;background:rgba(255,193,7,.08);border-radius:4px;border:1px solid rgba(255,193,7,.2)';
+  badge.textContent = 'INSTANT RESULT - This file was analyzed before (cache hit)';
+  el.insertBefore(badge, el.children[2]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FEATURE: WEBM STREAMING (live threat score during recording)
+// ═══════════════════════════════════════════════════════════════
+
+let _streamChunks  = [];
+let _streamIdx     = 0;
+let _streamTimer   = null;
+let _streamHistory = [];
+
+function startStreaming() {
+  _streamChunks = []; _streamIdx = 0; _streamHistory = [];
+  clearInterval(_streamTimer);
+  const card = document.getElementById('streamCard');
+  if (card) card.style.display = 'block';
+  set('streamStatus','LISTENING'); set('streamScore','--');
+  set('streamRisk','WAITING...'); set('streamClass','--');
+  renderStreamHistory();
+  _streamTimer = setInterval(() => {
+    if (_streamChunks.length === 0) return;
+    const blob = new Blob(_streamChunks, { type: getMime() || 'audio/webm' });
+    _streamChunks = [];
+    sendStreamChunk(blob, _streamIdx++);
+  }, 2000);
+}
+
+function stopStreaming() {
+  clearInterval(_streamTimer);
+  set('streamStatus','DONE');
+}
+
+async function sendStreamChunk(blob, idx) {
+  if (blob.size < 5000) return;
+  try {
+    const fd = new FormData();
+    fd.append('chunk', blob, 'chunk_' + idx + '.webm');
+    fd.append('source','record_live');
+    fd.append('chunk_idx', idx);
+    const r = await fetch(API + '/api/predict/stream', { method:'POST', body:fd });
+    if (!r.ok) return;
+    const reader = r.body.getReader();
+    const dec    = new TextDecoder();
+    let   buf    = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try { const d = JSON.parse(line.slice(6)); if (d.status === 'ok') updateStreamUI(d); } catch(_){}
+      }
+    }
+  } catch(e) { console.warn('[stream]', e.message); }
+}
+
+function updateStreamUI(data) {
+  const pct  = Math.round((data.threat_score || 0) * 100);
+  const risk = data.risk || 'SAFE';
+  const col  = risk === 'HIGH' ? '#ff1744' : risk === 'MEDIUM' ? '#ffc107' : '#00e676';
+  set('streamScore', pct + '%');
+  const scoreEl = document.getElementById('streamScore');
+  if (scoreEl) scoreEl.style.color = col;
+  const bar = document.getElementById('streamBar');
+  if (bar) { bar.style.width = pct + '%'; bar.style.background = col; }
+  set('streamRisk', risk);
+  const riskEl = document.getElementById('streamRisk');
+  if (riskEl) riskEl.style.color = col;
+  set('streamClass', data.top_class || '--');
+  _streamHistory.push({ score: data.threat_score || 0, risk });
+  if (_streamHistory.length > 20) _streamHistory.shift();
+  renderStreamHistory();
+  if (data.threat_detected) {
+    const det = document.getElementById('bannerDetail');
+    if (det) det.textContent = 'LIVE: ' + (data.top_class||'').toUpperCase() + ' - ' + pct + '% - recording';
+    document.getElementById('alertBanner')?.classList.add('show');
+  }
+  set('streamStatus', 'CHUNK ' + (data.chunk_idx + 1));
+}
+
+function renderStreamHistory() {
+  const el = document.getElementById('streamHistory');
+  if (!el || !_streamHistory.length) return;
+  el.innerHTML = _streamHistory.map(h => {
+    const hpx = Math.max(4, Math.round(h.score * 32));
+    const col  = h.risk === 'HIGH' ? '#ff1744' : h.risk === 'MEDIUM' ? '#ffc107' : '#00e676';
+    return '<div style="flex:1;height:' + hpx + 'px;background:' + col + ';border-radius:2px;opacity:0.75;align-self:flex-end"></div>';
+  }).join('');
+}
+
+async function startRec() {
+  _streamChunks = []; _chunks = []; _blob = null;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate:16000, channelCount:1, echoCancellation:true }
+    });
+    _actx     = new AudioContext();
+    _analyser = _actx.createAnalyser(); _analyser.fftSize = 512;
+    _actx.createMediaStreamSource(stream).connect(_analyser);
+    drawRecWave();
+    const mime = getMime();
+    _mediaRec = new MediaRecorder(stream, { mimeType: mime });
+    _mediaRec.ondataavailable = e => {
+      if (e.data.size > 0) { _chunks.push(e.data); _streamChunks.push(e.data); }
+    };
+    _mediaRec.onstop = () => {
+      _blob = new Blob(_chunks, { type: mime || 'audio/webm' });
+      stopRecViz(); stopStreaming();
+      const btn = document.getElementById('btnAnalyzeRec');
+      if (btn) btn.disabled = false;
+      setRecLbl('Ready - ' + _recSecs + 's recorded');
+    };
+    _mediaRec.start(100);
+    startStreaming();
+    _recSecs = 0;
+    _timerInt = setInterval(() => {
+      _recSecs++;
+      const el = document.getElementById('recTimer');
+      if (el) { el.textContent = pad(_recSecs/60|0) + ':' + pad(_recSecs%60); el.classList.add('on'); }
+      if (_recSecs >= 60) stopRec();
+    }, 1000);
+    document.getElementById('btnRec')?.classList.add('on');
+    set('recBtnLbl','Stop'); setRecLbl('RECORDING');
+  } catch(e) { alert('Mic access denied: ' + e.message); }
+}
+
+function stopRec() {
+  if (_mediaRec?.state === 'recording') { _mediaRec.stop(); _mediaRec.stream.getTracks().forEach(t=>t.stop()); }
+  clearInterval(_timerInt); stopStreaming();
+  document.getElementById('btnRec')?.classList.remove('on');
+  set('recBtnLbl','Record');
+  document.getElementById('recTimer')?.classList.remove('on');
+}
+
+// Partial result updates on dashboard
+if (typeof _socket !== 'undefined' && _socket) {
+  _socket.on('partial_result', data => {
+    if (window.PAGE !== 'dashboard') return;
+    const pct = Math.round((data.threat_score||0)*100);
+    const el  = document.getElementById('gaugeRisk');
+    if (el) el.textContent = 'LIVE: ' + data.risk + ' ' + pct + '%';
+  });
+}
+
+// Auto-load TF model on analyze page
+if (window.PAGE === 'analyze') setTimeout(loadTFModel, 1500);
