@@ -819,3 +819,4 @@ body::after {
 .rtag.r-high   { background:#DC2626; color:#fff; }
 .rtag.r-medium { background:#D97706; color:#fff; }
 .rtag.r-safe   { background:#059669; color:#fff; }
+@keyframes spin { to { transform: rotate(360deg); } }

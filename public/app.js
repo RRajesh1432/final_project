@@ -415,60 +415,239 @@ async function analyzeRec() {
 }
 
 function showResult(data) {
+  const risk = data.risk || (data.threat_detected ? 'HIGH' : 'SAFE');
+  const score = data.threat_score || 0;
+
+  // ── NEW analyze page (heroCard + azResults layout) ───────
+  if (document.getElementById('heroCard')) {
+    _showResultNew(data, risk, score);
+    return;
+  }
+
+  // ── LEGACY fallback (old resultCard layout) ──────────────
   const card = document.getElementById('resultCard');
   if (!card) return;
   card.style.display = 'block';
-  const pct  = (data.threat_score*100).toFixed(1)+'%';
-  const risk = data.risk || (data.threat_detected ? 'HIGH' : 'SAFE');
-
-  // ── Result summary card ──────────────────────────────────
+  const pct = (score*100).toFixed(1)+'%';
   set('resPct', pct);
   const rt = document.getElementById('resRisk');
   if (rt) { rt.textContent = risk; rt.className = 'rtag r-' + risk.toLowerCase(); }
-  drawMiniGauge('resGauge', data.threat_score);
-
-  // Detection method label
-  const det = document.getElementById('resDetectedVia');
-  if (det && data.threat_detected) {
-    det.textContent = `Detected via: Score_t=${(data.threat_score).toFixed(3)}>=${data.threshold||0.25}`;
-    det.style.display = 'block';
-  } else if (det) { det.style.display = 'none'; }
-
-  // Cache hit badge
+  drawMiniGauge('resGauge', score);
   const ch = document.getElementById('resCacheHit');
-  if (ch) { ch.style.display = data.cache_hit ? 'inline-flex' : 'none'; }
-
-  // Top 10 classes
+  if (ch) ch.style.display = data.cache_hit ? 'inline-flex' : 'none';
   renderClasses(data.all_sounds, 'resClasses', 10);
-
-  // ── Full analysis panels ─────────────────────────────────
   const full = document.getElementById('fullResult');
   if (full) full.style.display = 'block';
-
-  // Spectrogram
   const sp = document.getElementById('resSpec');
   if (sp && data.spectrogram) { sp.src = `data:image/png;base64,${data.spectrogram}`; sp.style.display='block'; }
-
-  // Waveform
   const wv = document.getElementById('resWave');
   if (wv && data.waveform_img) { wv.src = `data:image/png;base64,${data.waveform_img}`; wv.style.display='block'; }
-
-  // Threat class scores (5 bars)
   renderThreatDetail(data.threat_detail || data.multi_threat);
-
-  // Audio metadata
   renderAudioMeta(data);
-
-  // Temporal segments
   renderTemporalFrames(data.frames);
-
   card.scrollIntoView({ behavior: 'smooth' });
   if (data.threat_detected) showBanner(data);
 }
 
+// ─── New analyze page renderer ────────────────────────────────
+function _showResultNew(data, risk, score) {
+  // Hide empty state, show all result cards
+  const hide = id => { const e = document.getElementById(id); if(e) e.style.display='none'; };
+  const show = (id, disp) => { const e = document.getElementById(id); if(e) e.style.display=disp||'block'; };
+
+  hide('emptyState');
+  show('heroCard');
+  show('aiCard');
+  show('classesCard');
+  show('visualsCard', 'grid');
+  show('segCard');
+  show('metaCard');
+
+  // ── 1. Hero: gauge + risk badge + threat bars ─────────────
+  _drawResGauge('resGaugeC', score, 120);
+  set('resGaugePct', Math.round(score*100)+'%');
+  document.getElementById('resGaugePct').style.color = score>=0.75?'#ff1744':score>=0.3?'#ffc107':'#00e676';
+
+  const rb = document.getElementById('resRiskBadge');
+  if (rb) { rb.textContent = risk; rb.className = 'rbadge '+risk; }
+
+  set('resTimestamp', (data.date||'')+(data.date&&data.time?' ':'')+( data.time||''));
+
+  // Cache pill
+  const cp = document.getElementById('cachePill');
+  if (cp) cp.className = 'cpill' + (data.cache_hit ? ' show' : '');
+
+  // Threat class bars
+  const bars = document.getElementById('resThrBars');
+  if (bars) {
+    const threats = data.threat_detail || data.multi_threat || [];
+    bars.innerHTML = threats.slice(0,5).map(t => {
+      const pct = t.pct !== undefined ? t.pct : (t.score||0)*100;
+      const cls = pct >= 25 ? 'hi' : pct >= 10 ? 'med' : 'lo';
+      const label = t.class || t.label || '—';
+      const flagged = pct >= 25;
+      return `<div class="tbr">
+        <span class="tbn">${label}</span>
+        <div class="tbt"><div class="tbf ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
+        <span class="tbp${flagged?' flag':''}">${pct.toFixed(1)}%</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Detection rule pills
+  const rules = data.detection_rules || {};
+  const dr = document.getElementById('detRules');
+  if (dr && data.threat_detected) {
+    dr.style.display = 'flex';
+    const _dp = (id, on) => {
+      const e = document.getElementById(id);
+      if (e) e.className = 'dp ' + (on ? 'on' : 'off');
+    };
+    _dp('ruleScore',   rules.score_threshold);
+    _dp('ruleTopRank', rules.top_rank);
+    _dp('ruleTop2',    rules.top_2);
+  }
+
+  // ── 2. AI Explanation (async — show loading first) ────────
+  show('aiLoading', 'flex');
+  hide('aiBody');
+  _fetchAIExplanation(data);
+
+  // ── 3. Top classes ────────────────────────────────────────
+  renderClasses(data.all_sounds, 'resClasses', 12);
+
+  // ── 4. Waveform + Spectrogram ─────────────────────────────
+  const wv = document.getElementById('resWave');
+  const wEmpty = document.getElementById('waveEmpty');
+  if (wv && data.waveform_img) {
+    wv.src = `data:image/png;base64,${data.waveform_img}`;
+    wv.style.display = 'block';
+    if (wEmpty) wEmpty.style.display = 'none';
+  }
+  const sp = document.getElementById('resSpec');
+  const sEmpty = document.getElementById('specEmpty');
+  if (sp && data.spectrogram) {
+    sp.src = `data:image/png;base64,${data.spectrogram}`;
+    sp.style.display = 'block';
+    if (sEmpty) sEmpty.style.display = 'none';
+  }
+
+  // ── 5. Temporal segments ──────────────────────────────────
+  const segs = document.getElementById('resSegs');
+  if (segs && data.frames) {
+    segs.innerHTML = data.frames.map(f => {
+      const pct = (f.threat_score*100).toFixed(1);
+      const isThr = f.is_threat || f.threat_score >= 0.25;
+      return `<div class="sc${isThr?' threat':''}">
+        <div class="sc-t">${f.start}s – ${f.end}s</div>
+        <div class="sc-l${isThr?' t':''}">${f.label}</div>
+        <div class="sc-bb"><div class="sc-b${isThr?' t':''}" style="width:${Math.min(f.threat_score*100,100)}%"></div></div>
+        <span class="sc-f${isThr?' t':' s'}">${isThr?'⚠ THREAT':'✓ Safe'}</span>
+        <div style="font-size:9px;color:var(--t3);margin-top:3px;font-family:monospace">${pct}%</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 6. Metadata ───────────────────────────────────────────
+  const meta = document.getElementById('resMeta');
+  if (meta) {
+    meta.innerHTML = `
+      <div class="mchip"><div class="mval">${data.duration||'—'}s</div><div class="mlbl">DURATION</div></div>
+      <div class="mchip"><div class="mval">${(data.sample_rate||16000).toLocaleString()}</div><div class="mlbl">SAMPLE RATE</div></div>
+      <div class="mchip"><div class="mval">${data.all_sounds?.length||527}</div><div class="mlbl">CLASSES</div></div>
+      <div class="mchip"><div class="mval${data.threat_detected?' d':''}">${(data.threshold||0.25).toFixed(2)}</div><div class="mlbl">THRESHOLD τ</div></div>
+      <div class="mchip"><div class="mval">${data.source||'upload'}</div><div class="mlbl">SOURCE</div></div>
+      <div class="mchip"><div class="mval">${data.is_finetuned?'Fine-tuned':'Base'}</div><div class="mlbl">MODEL</div></div>`;
+  }
+
+  // Scroll to results on mobile
+  if (window.innerWidth < 900) {
+    document.getElementById('heroCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (data.threat_detected) showBanner(data);
+}
+
+// ─── Draw full-size result gauge ──────────────────────────────
+function _drawResGauge(canvasId, score, size) {
+  const canvas = document.getElementById(canvasId); if (!canvas) return;
+  const S = size, cx = S/2, cy = S/2, r = S*0.44;
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,S,S);
+  // Track
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=10; ctx.stroke();
+  // Colored arc
+  const clr = score>=0.75?'#ff1744':score>=0.3?'#ffc107':'#00e676';
+  const g = ctx.createLinearGradient(cx-r,cy,cx+r,cy);
+  if (score>=0.75){ g.addColorStop(0,'#ff1744'); g.addColorStop(1,'#ff6d00'); }
+  else if(score>=0.3){ g.addColorStop(0,'#ffc107'); g.addColorStop(1,'#ffea00'); }
+  else { g.addColorStop(0,'#00e676'); g.addColorStop(1,'#69f0ae'); }
+  ctx.beginPath(); ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+(score||0)*Math.PI*2);
+  ctx.strokeStyle=g; ctx.lineWidth=10; ctx.lineCap='round'; ctx.stroke();
+  // τ marker
+  const ta=-Math.PI/2+0.75*Math.PI*2;
+  ctx.beginPath();
+  ctx.moveTo(cx+(r-6)*Math.cos(ta), cy+(r-6)*Math.sin(ta));
+  ctx.lineTo(cx+(r+5)*Math.cos(ta), cy+(r+5)*Math.sin(ta));
+  ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke();
+}
+
+// ─── Fetch AI explanation async ───────────────────────────────
+async function _fetchAIExplanation(data) {
+  try {
+    const res = await fetch(API + '/api/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threat_detected:  data.threat_detected,
+        risk:             data.risk,
+        threat_score:     data.threat_score,
+        top_threat_class: data.top_threat_class,
+        top_class:        data.all_sounds?.[0]?.label,
+        detection_reason: data.detection_reason,
+        all_sounds:       data.all_sounds?.slice(0,5),
+        duration:         data.duration,
+        source:           data.source,
+      })
+    });
+    const exp = await res.json();
+    _renderAIExplanation(exp, data.threat_detected);
+  } catch(e) {
+    _renderAIExplanation({
+      summary: 'AI explanation unavailable.',
+      what_was_heard: '—',
+      threat_assessment: '—',
+      recommended_action: 'Review the results manually.',
+      confidence_note: 'Connection error: '+e.message
+    }, data.threat_detected);
+  }
+}
+
+function _renderAIExplanation(exp, isTheat) {
+  const loading = document.getElementById('aiLoading');
+  const body    = document.getElementById('aiBody');
+  if (!body) return;
+  if (loading) loading.style.display = 'none';
+  body.style.display = 'block';
+
+  const sumEl = document.getElementById('aiSummary');
+  if (sumEl) {
+    sumEl.textContent = exp.summary || '—';
+    sumEl.className = 'ai-sum ' + (isTheat ? 'threat' : 'safe');
+  }
+  set('aiHeard',      exp.what_was_heard  || '—');
+  set('aiAssessment', exp.threat_assessment || '—');
+  set('aiActionTxt',  exp.recommended_action || '—');
+  set('aiConfNote',   exp.confidence_note || '—');
+
+  const actEl = document.getElementById('aiAction');
+  if (actEl) actEl.className = 'ai-act ' + (isTheat ? 'threat' : 'safe');
+}
+
 function renderThreatDetail(threats) {
   const el = document.getElementById('resThrDetail'); if (!el || !threats) return;
-  const TAU_DISPLAY = 0.25; // base model threshold
+  const TAU_DISPLAY = 0.25;
   el.innerHTML = threats.map(t => {
     const pct   = t.pct !== undefined ? t.pct : (t.score||0)*100;
     const label = t.class || t.label || '—';
@@ -619,19 +798,26 @@ function renderHistTable(rows) {
   if (!el) return;
   if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:28px">No analyses yet.</div>'; return; }
   const rTag = r => `<span class="rtag r-${r.toLowerCase()}">${r}</span>`;
+  const THRCLS = ['gunshot','explosion','glass','scream','siren'];
   el.innerHTML = `
     <div class="h-hd"><div>#</div><div>Top Class</div><div>Score</div><div>Risk</div><div>Source</div><div>Time</div><div></div></div>
-    ${rows.map(r=>`
-    <div class="h-row${r.threat?' thr':''}" onclick="openHistoryModal(${r.id})" style="cursor:pointer">
-      <div class="h-id">${r.id}</div>
-      <div class="h-cls">${r.top_class||'—'}</div>
-      <div class="h-sc">${(r.score*100).toFixed(1)}%</div>
-      <div>${rTag(r.risk)}</div>
-      <div><span class="s-tag">${r.source||'upload'}</span></div>
-      <div class="h-time">${r.date||''} ${r.time||''}</div>
-      <div><button class="h-view-btn" onclick="event.stopPropagation();openHistoryModal(${r.id})">View &#8599;</button></div>
-    </div>`).join('')}`;
+    ${rows.map(r => {
+      const isThrCls = THRCLS.some(x => (r.top_class||'').includes(x));
+      return `<div class="h-row${r.threat?' thr':''}" onclick="openHistoryModal(${r.id})" style="cursor:pointer">
+        <div class="h-id">${r.id}</div>
+        <div class="h-cls" style="display:flex;align-items:center;gap:5px">
+          ${r.threat?'<span style="color:var(--red2);font-size:10px;flex-shrink:0">⚠</span>':''}
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap${isThrCls?';color:var(--red2)':''}">${r.top_class||'—'}</span>
+        </div>
+        <div class="h-sc" style="${r.threat?'font-weight:700;color:var(--red2)':''}">${(r.score*100).toFixed(1)}%</div>
+        <div>${rTag(r.risk)}</div>
+        <div><span class="s-tag">${r.source||'upload'}</span></div>
+        <div class="h-time">${r.date||''} ${r.time||''}</div>
+        <div><button class="h-view-btn" onclick="event.stopPropagation();openHistoryModal(${r.id})">View ↗</button></div>
+      </div>`;
+    }).join('')}`;
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  ALERTS PAGE
@@ -1343,47 +1529,164 @@ async function openHistoryModal(id) {
   if (!modal || !body) return;
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
-  body.innerHTML = `<div style="padding:48px;text-align:center;color:#64748B">Loading analysis #${id}...</div>`;
+  body.innerHTML = `<div style="padding:48px;text-align:center;color:#64748B"><div style="width:28px;height:28px;border:2px solid rgba(99,102,241,.3);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px"></div>Loading analysis #${id}...</div>`;
   try {
     const data = await apiFetch('/api/history/' + id);
     if (data.error) { body.innerHTML = `<div style="padding:32px;color:#DC2626">Error: ${data.error}</div>`; return; }
-    const risk = data.risk || 'SAFE';
-    const pct  = ((data.threat_score||data.score||0)*100).toFixed(1);
-    const isT  = data.threat_detected || data.threat;
-    // Context verdict
-    let cvHtml = '';
-    const cv = data.context_verdict ? (typeof data.context_verdict==='string' ? JSON.parse(data.context_verdict) : data.context_verdict) : null;
-    if (cv) {
-      const ac = cv.action === 'ALERT' ? '#DC2626' : cv.action === 'DISMISS' ? '#059669' : '#D97706';
-      cvHtml = `<div style="margin-top:12px;padding:12px;border-radius:8px;border:1px solid ${ac}20;background:${ac}08">
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
-          <span style="font-size:10px;font-weight:800;padding:3px 10px;border-radius:12px;background:${ac};color:#fff">${cv.action}</span>
-          <span style="font-size:10px;color:#64748B">${cv.pattern_label||''}</span>
-          <span style="font-size:10px;color:#64748B;margin-left:auto">LLM confidence: ${((cv.confidence||0)*100).toFixed(0)}%</span>
+    const risk  = data.risk || 'SAFE';
+    const score = data.threat_score || data.score || 0;
+    const pct   = (score*100).toFixed(1);
+    const isT   = !!(data.threat_detected || data.threat);
+    const rClr  = isT ? '#DC2626' : risk==='MEDIUM' ? '#D97706' : '#059669';
+    const rBg   = isT ? '#FEF2F2' : risk==='MEDIUM' ? '#FFFBEB' : '#F0FDF4';
+
+    const threats = data.threat_detail || data.multi_threat || [];
+    const thrBarsHtml = threats.slice(0,5).map(t => {
+      const p = t.pct !== undefined ? t.pct : (t.score||0)*100;
+      const label = t.class || t.label || '—';
+      const clr = p>=25?'#DC2626':p>=10?'#D97706':'#94A3B8';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <span style="font-size:10px;color:#64748B;width:80px;flex-shrink:0;text-transform:capitalize">${label}</span>
+        <div style="flex:1;height:5px;background:rgba(0,0,0,.07);border-radius:3px;overflow:hidden">
+          <div style="height:100%;border-radius:3px;background:${clr};width:${Math.min(p,100)}%"></div>
         </div>
-        <div style="font-size:11px;color:#334155">${cv.reasoning||''}</div>
+        <span style="font-size:9px;font-family:monospace;width:36px;text-align:right;color:${p>=25?'#DC2626':'#94A3B8'};font-weight:${p>=25?700:400}">${p.toFixed(1)}%</span>
       </div>`;
-    }
-    body.innerHTML = `
-      <div style="padding:16px;background:${isT?'#FEF2F2':'#F0FDF4'};border-radius:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <span style="font-size:10px;font-weight:800;padding:4px 12px;border-radius:20px;background:${isT?'#DC2626':risk==='MEDIUM'?'#D97706':'#059669'};color:#fff">${isT?'⚠ ':' '}${risk}</span>
-          <div style="font-size:16px;font-weight:800;margin-top:6px">Analysis #${id}</div>
-          <div style="font-size:11px;color:#64748B;margin-top:2px">${data.date||''} ${data.time||''} · ${data.source||'upload'} · ${data.duration||'—'}s</div>
+    }).join('') || '<div style="font-size:11px;color:#94A3B8">No threat class data</div>';
+
+    const frames = data.frames || [];
+    const framesHtml = frames.length ? `<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
+      ${frames.map(f => {
+        const fp = (f.threat_score*100).toFixed(1);
+        const ft = f.is_threat || f.threat_score >= 0.25;
+        return `<div style="flex-shrink:0;min-width:120px;padding:9px 11px;border-radius:9px;border:1px solid ${ft?'rgba(220,38,38,.35)':'rgba(0,0,0,.1)'};background:${ft?'rgba(220,38,38,.04)':'rgba(0,0,0,.02)'}">
+          <div style="font-size:9px;color:#94A3B8;font-family:monospace;margin-bottom:3px">${f.start}s–${f.end}s</div>
+          <div style="font-size:10px;font-weight:600;color:${ft?'#DC2626':'#334155'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px">${f.label}</div>
+          <div style="height:3px;background:rgba(0,0,0,.07);border-radius:2px;overflow:hidden;margin-bottom:4px">
+            <div style="height:100%;background:${ft?'#DC2626':'#60A5FA'};width:${Math.min(f.threat_score*100,100)}%"></div>
+          </div>
+          <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:${ft?'rgba(220,38,38,.12)':'rgba(5,150,105,.1)'};color:${ft?'#DC2626':'#059669'}">${ft?'⚠ THREAT':'✓ Safe'}</span>
+        </div>`;
+      }).join('')}</div>` : '';
+
+    const dRules = data.detection_rules || {};
+    const rulesHtml = (isT && Object.keys(dRules).length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${dRules.score_threshold?'<span style="font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:rgba(220,38,38,.1);color:#DC2626;border:1px solid rgba(220,38,38,.2)">Score threshold</span>':''}
+      ${dRules.top_rank?'<span style="font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:rgba(220,38,38,.1);color:#DC2626;border:1px solid rgba(220,38,38,.2)">Top-rank detection</span>':''}
+      ${dRules.top_2?'<span style="font-size:9px;font-weight:700;padding:3px 9px;border-radius:10px;background:rgba(220,38,38,.1);color:#DC2626;border:1px solid rgba(220,38,38,.2)">Top-2 class</span>':''}
+    </div>` : '';
+
+    const top8Html = (data.all_sounds||[]).slice(0,8).map(s => {
+      const sp = (s.score*100).toFixed(1);
+      const isThrCls = ['gunshot','explosion','glass','scream','siren'].some(x => s.label.includes(x));
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-size:10px;color:${isThrCls?'#DC2626':'#475569'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.label}</span>
+        <div style="width:80px;height:4px;background:rgba(0,0,0,.08);border-radius:2px;overflow:hidden;flex-shrink:0">
+          <div style="height:100%;background:${isThrCls?'#DC2626':'#94A3B8'};width:${Math.min(parseFloat(sp)*3,100)}%;border-radius:2px"></div>
         </div>
-        <div style="font-size:40px;font-weight:900;color:${isT?'#DC2626':risk==='MEDIUM'?'#D97706':'#059669'}">${pct}%</div>
+        <span style="font-size:9px;font-family:monospace;color:#94A3B8;width:32px;text-align:right;flex-shrink:0">${sp}%</span>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div style="padding:16px 18px;background:${rBg};border-radius:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <span style="font-size:11px;font-weight:800;padding:4px 14px;border-radius:20px;background:${rClr};color:#fff">${isT?'⚠ ':''}${risk}</span>
+          <div style="font-size:18px;font-weight:800;margin-top:8px;color:#1E293B">Analysis #${id}</div>
+          <div style="font-size:11px;color:#64748B;margin-top:3px">${data.date||''} ${data.time||''} · ${data.source||'upload'} · ${data.duration||'—'}s · ${data.sample_rate||16000} Hz</div>
+          <div style="font-size:11px;color:#64748B;margin-top:2px">Device: ${data.device_id||'unknown'}${data.location?' · '+data.location:''}</div>
+          ${rulesHtml}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:42px;font-weight:900;line-height:1;color:${rClr};font-family:monospace">${pct}%</div>
+          <div style="font-size:10px;color:#94A3B8;margin-top:2px">Threat Score · τ=${data.threshold||0.25}</div>
+        </div>
       </div>
-      ${cvHtml}
-      ${data.spectrogram ? `<div style="margin-top:12px"><div style="font-size:9px;letter-spacing:2px;color:#94A3B8;margin-bottom:6px">LOG-MEL SPECTROGRAM</div><img src="data:image/png;base64,${data.spectrogram}" style="width:100%;border-radius:6px"></div>` : '<div style="padding:20px;text-align:center;color:#94A3B8;font-size:11px">Spectrogram not available for older records</div>'}
+
+      <div id="modalAiCard" style="border:1px solid rgba(99,102,241,.25);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(99,102,241,.06);border-bottom:1px solid rgba(99,102,241,.15)">
+          <span style="font-size:9px;font-weight:700;letter-spacing:1px;padding:3px 10px;border-radius:10px;background:rgba(99,102,241,.15);color:#818cf8;border:1px solid rgba(99,102,241,.3)">✦ AI EXPLANATION</span>
+          <span style="font-size:10px;color:#94A3B8;margin-left:auto">Claude Haiku</span>
+        </div>
+        <div id="modalAiBody" style="padding:14px 16px">
+          <div style="display:flex;align-items:center;gap:8px;color:#94A3B8;font-size:12px">
+            <div style="width:16px;height:16px;border:2px solid rgba(99,102,241,.3);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>
+            Generating AI explanation...
+          </div>
+        </div>
+      </div>
+
+      <div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden;margin-bottom:14px">
+        <div style="padding:10px 14px;background:rgba(0,0,0,.03);border-bottom:1px solid rgba(0,0,0,.07)">
+          <span style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#475569">THREAT CLASS BREAKDOWN</span>
+        </div>
+        <div style="padding:12px 14px">${thrBarsHtml}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden">
+          <div style="padding:8px 12px;background:rgba(0,0,0,.03);border-bottom:1px solid rgba(0,0,0,.07)"><span style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#475569">LOG-MEL SPECTROGRAM</span></div>
+          <div style="padding:10px">${data.spectrogram?`<img src="data:image/png;base64,${data.spectrogram}" style="width:100%;border-radius:6px;display:block">`:'<div style="padding:20px;text-align:center;color:#94A3B8;font-size:11px">Not available for this record</div>'}</div>
+        </div>
+        <div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden">
+          <div style="padding:8px 12px;background:rgba(0,0,0,.03);border-bottom:1px solid rgba(0,0,0,.07)"><span style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#475569">WAVEFORM</span></div>
+          <div style="padding:10px">${data.waveform_img?`<img src="data:image/png;base64,${data.waveform_img}" style="width:100%;border-radius:6px;display:block">`:'<div style="padding:20px;text-align:center;color:#94A3B8;font-size:11px">Not available</div>'}</div>
+        </div>
+      </div>
+
+      ${framesHtml?`<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden;margin-bottom:14px"><div style="padding:10px 14px;background:rgba(0,0,0,.03);border-bottom:1px solid rgba(0,0,0,.07)"><span style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#475569">TEMPORAL SEGMENTS</span></div><div style="padding:12px 14px">${framesHtml}</div></div>`:''}
+
+      ${top8Html?`<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden"><div style="padding:10px 14px;background:rgba(0,0,0,.03);border-bottom:1px solid rgba(0,0,0,.07)"><span style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#475569">TOP AUDIOSET CLASSES</span></div><div style="padding:12px 14px">${top8Html}</div></div>`:''}
     `;
+
+    _fetchModalAIExplanation(data, isT);
   } catch(e) {
     body.innerHTML = `<div style="padding:32px;color:#DC2626">Failed: ${e.message}</div>`;
   }
 }
+
+async function _fetchModalAIExplanation(data, isTheat) {
+  const el = document.getElementById('modalAiBody');
+  if (!el) return;
+  try {
+    const res = await fetch(API + '/api/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threat_detected:  isTheat,
+        risk:             data.risk,
+        threat_score:     data.threat_score || data.score,
+        top_threat_class: data.top_threat_class,
+        top_class:        data.top_class || (data.all_sounds||[])[0]?.label,
+        detection_reason: data.detection_reason,
+        all_sounds:       (data.all_sounds||[]).slice(0,5),
+        duration:         data.duration,
+        source:           data.source,
+      })
+    });
+    const exp = await res.json();
+    const rClr = isTheat ? '#DC2626' : '#059669';
+    el.innerHTML = `
+      <div style="font-size:13px;font-weight:600;color:#1E293B;line-height:1.5;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,.03);border-left:3px solid ${rClr}">${exp.summary||'—'}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><div style="font-size:9px;letter-spacing:2px;color:#94A3B8;text-transform:uppercase;margin-bottom:4px">What was heard</div><div style="font-size:11px;color:#475569;line-height:1.6">${exp.what_was_heard||'—'}</div></div>
+        <div><div style="font-size:9px;letter-spacing:2px;color:#94A3B8;text-transform:uppercase;margin-bottom:4px">Threat assessment</div><div style="font-size:11px;color:#475569;line-height:1.6">${exp.threat_assessment||'—'}</div></div>
+      </div>
+      <div style="padding:10px 12px;border-radius:8px;border:1px solid ${isTheat?'rgba(220,38,38,.2)':'rgba(5,150,105,.2)'};background:${isTheat?'rgba(220,38,38,.04)':'rgba(5,150,105,.04)'};font-size:12px;color:#1E293B;line-height:1.5;margin-bottom:8px">
+        <div style="font-size:9px;letter-spacing:2px;color:#94A3B8;text-transform:uppercase;margin-bottom:4px;font-weight:700">Recommended Action</div>
+        ${exp.recommended_action||'—'}
+      </div>
+      <div style="font-size:10px;color:#94A3B8">${exp.confidence_note||''}</div>`;
+  } catch(e) {
+    if (el) el.innerHTML = `<div style="font-size:11px;color:#94A3B8;padding:4px">AI explanation unavailable.</div>`;
+  }
+}
+
 function closeHistoryModal() {
   document.getElementById('histModal')?.classList.remove('open');
   document.body.style.overflow = '';
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  NTFY.SH FUNCTIONS
