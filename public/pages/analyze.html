@@ -63,6 +63,11 @@
         <button class="btn-primary" onclick="analyzeUpload()"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3,2 12,6.5 3,11"/></svg> Analyze Audio</button>
       </div>
       <div class="tab-pane" id="pane-record">
+        <div class="rec-mode-tabs">
+          <button class="rec-mode-btn on" id="modeSnap" onclick="switchRecMode('snap')">Single Shot</button>
+          <button class="rec-mode-btn" id="modeLive" onclick="switchRecMode('live')">Continuous Live</button>
+        </div>
+        <div id="recModeSnap">
         <div class="rec-wrap">
           <div class="rec-viz"><canvas id="recC"></canvas><div class="rec-viz-lbl" id="recVizLbl">Ready</div></div>
           <div class="rec-timer" id="recTimer">00:00</div>
@@ -71,11 +76,31 @@
             <button class="btn-analyze-r" id="btnAnalyzeRec" onclick="analyzeRec()" disabled><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><polygon points="2,1 11,6 2,11"/></svg> Analyze</button>
           </div>
           <p style="font-size:9px;color:var(--t3);text-align:center;margin-top:4px">Max 60 seconds · Analysis sent to server, dashboard updates everywhere</p>
-        </div>
-      </div>
-    </div>
+        </div><!-- /recModeSnap -->
 
-  
+        <!-- Continuous Live Mode -->
+        <div id="recModeLive" style="display:none">
+          <div class="rec-wrap">
+            <div class="rec-viz"><canvas id="recCLive"></canvas><div class="rec-viz-lbl" id="recVizLblLive">Ready for live analysis</div></div>
+            <div class="live-status-badge" id="liveStatusBadge" style="display:none">
+              <span class="live-dot"></span><span id="liveChunkLabel">Starting...</span>
+            </div>
+            <div style="display:flex;justify-content:center;margin:10px 0">
+              <button class="btn-live-rec" id="btnLiveRec" onclick="startLiveRec()">Start Live Analysis</button>
+            </div>
+            <p style="font-size:10px;color:var(--t3);text-align:center">
+              Splits mic into <b>10-second chunks</b> · Analyzes continuously · Threat = instant ntfy alert
+            </p>
+            <div class="live-chunk-hdr"><span>Live Analysis Stream</span></div>
+            <div class="live-chunk-feed" id="liveChunkFeed">
+              <div style="padding:12px;font-size:11px;color:var(--t3)">Chunks appear here as analyzed...</div>
+            </div>
+          </div>
+        </div><!-- /recModeLive -->
+      </div><!-- /pane-record -->
+    </div><!-- card -->
+
+
     <!-- Live streaming threat meter (shown during recording) -->
     <div class="card" id="streamCard" style="display:none;margin-bottom:12px">
       <div class="card-hd" style="padding:14px 16px 0">
@@ -125,6 +150,16 @@
 </div>
 
 <div class="loader" id="loader"><div class="loader-box"><div class="sonar"><div class="s-ring"></div><div class="s-ring"></div><div class="s-ring"></div><div class="s-core"></div></div><div class="loader-title">Analyzing with PFT-AST</div><div class="loader-msg" id="loaderMsg">Uploading audio...</div><div class="loader-timer" id="loaderTimer"></div></div></div>
+
+<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()">
+  <div class="hist-modal-inner">
+    <div class="hist-modal-topbar">
+      <div style="font-size:13px;font-weight:700">Full Analysis Report</div>
+      <button class="hist-modal-close" onclick="closeHistoryModal()">X Close</button>
+    </div>
+    <div class="hist-modal-body" id="histModalBody"></div>
+  </div>
+</div>
 <script src="/config.js"></script>
 <script src="/app.js"></script>
 <script>window.PAGE='analyze'; initPage();</script>

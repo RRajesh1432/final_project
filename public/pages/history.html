@@ -41,6 +41,16 @@
   <div class="card"><div class="card-hd" style="padding:14px 16px 10px"><span class="card-title">ANALYSIS LOG</span></div><div class="htable" id="histTable"><div class="empty" style="padding:28px">Loading...</div></div></div>
 </main>
 </div>
+
+<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()">
+  <div class="hist-modal-inner">
+    <div class="hist-modal-topbar">
+      <div style="font-size:13px;font-weight:700">Full Analysis Report</div>
+      <button class="hist-modal-close" onclick="closeHistoryModal()">X Close</button>
+    </div>
+    <div class="hist-modal-body" id="histModalBody"></div>
+  </div>
+</div>
 <script src="/config.js"></script>
 <script src="/app.js"></script><script>window.PAGE='history'; initPage();</script>
 </body>

@@ -25,6 +25,8 @@ let _deferredInstall = null;
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
 function initPage() {
+  initDeviceInfo();
+  requestNotifPermission();
   highlightNav();
   connectSocket();
   registerSW();
@@ -164,7 +166,322 @@ function b64ToUint8(b64) {
 // ═══════════════════════════════════════════════════════════════
 //  SOCKET.IO
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════
+//  DEVICE ID & GEOLOCATION
+// ═══════════════════════════════════════
+function initDeviceInfo() {
+  _deviceId = localStorage.getItem('pft_device_id');
+  if (!_deviceId) {
+    _deviceId = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8);
+    localStorage.setItem('pft_device_id', _deviceId);
+  }
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => { _userLocation = { lat: pos.coords.latitude.toFixed(5), lng: pos.coords.longitude.toFixed(5) }; },
+      () => {},
+      { timeout: 8000, maximumAge: 300000 }
+    );
+  }
+}
+function getLocationString() {
+  return _userLocation ? `${_userLocation.lat},${_userLocation.lng}` : '';
+}
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default')
+    setTimeout(() => Notification.requestPermission(), 3000);
+}
+function showBrowserNotif(data) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const top = data.multi_threat?.[0]?.label || data.top_class || 'Unknown';
+  const pct = (data.threat_score * 100).toFixed(1);
+  const loc = _userLocation ? `Location: ${_userLocation.lat},${_userLocation.lng}` : '';
+  const n   = new Notification(`THREAT: ${top.toUpperCase()}`, {
+    body: `Score: ${pct}%  Source: ${data.source||'unknown'}\n${loc}`,
+    icon: '/icons/icon-192.png', badge: '/icons/badge-72.png',
+    tag: 'pft-threat', renotify: true, requireInteraction: true,
+    vibrate: [500,100,500,100,500,200,100,200,100,200,500,100,500],
+  });
+  n.onclick = () => { window.focus(); n.close(); };
+  setTimeout(() => n.close(), 15000);
+}
+
+// ═══════════════════════════════════════
+//  NTFY.SH FUNCTIONS
+// ═══════════════════════════════════════
+async function initNtfy() {
+  try {
+    const cfg = await apiFetch('/api/ntfy-config');
+    if (cfg.topic) setNtfyConfigured(cfg.topic);
+  } catch(_) {}
+}
+function setNtfyConfigured(topic) {
+  const badge = document.getElementById('ntfyBadge');
+  const cur   = document.getElementById('ntfyCurrent');
+  const curT  = document.getElementById('ntfyCurrentTopic');
+  const input = document.getElementById('ntfyTopicInput');
+  const done  = document.getElementById('ntfyDoneStep');
+  const at    = document.getElementById('ntfyActiveTopic');
+  if (badge) { badge.textContent='ACTIVE'; badge.style.background='#D1FAE5'; badge.style.color='#059669'; }
+  if (cur)   cur.style.display  = 'block';
+  if (curT)  curT.textContent   = topic;
+  if (input) input.style.display= 'none';
+  if (done)  done.style.display = 'flex';
+  if (at)    at.textContent     = topic;
+  ['ntfyStep2Num','ntfyStep3Num'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent='✓'; el.classList.add('done'); }
+  });
+}
+function changeNtfyTopic() {
+  const input = document.getElementById('ntfyTopicInput');
+  const cur   = document.getElementById('ntfyCurrent');
+  if (input) input.style.display = '';
+  if (cur)   cur.style.display   = 'none';
+}
+async function saveNtfyTopic() {
+  const input  = document.getElementById('ntfyTopicInput');
+  const result = document.getElementById('ntfySaveResult');
+  const btn    = document.querySelector('.ntfy-save-btn');
+  const topic  = (input?.value || '').trim();
+  if (!topic || topic.length < 3) { showNtfyResult(result, 'Enter a topic (min 3 chars)', false); return; }
+  if (btn) { btn.textContent='Saving...'; btn.disabled=true; }
+  try {
+    const data = await apiPost('/api/ntfy-config', {topic});
+    if (data.ok) { showNtfyResult(result, `Saved! Open ntfy app and subscribe to "${topic}"`, true); setNtfyConfigured(topic); }
+    else         { showNtfyResult(result, data.error || 'Failed', false); }
+  } catch(e) { showNtfyResult(result, e.message, false); }
+  finally { if (btn) { btn.textContent='Save'; btn.disabled=false; } }
+}
+async function testNtfy() {
+  const btn    = document.getElementById('ntfyTestBtn');
+  const result = document.getElementById('ntfyTestResult');
+  if (btn) { btn.textContent='Sending...'; btn.disabled=true; }
+  try {
+    const data = await fetch(API+'/api/ntfy-test', {method:'POST'}).then(r=>r.json());
+    if (data.ok) {
+      showNtfyResult(result, data.message, true);
+      const done = document.getElementById('ntfyDoneStep');
+      if (done) done.style.display='flex';
+    } else {
+      showNtfyResult(result, data.error || 'Failed', false);
+    }
+  } catch(e) { showNtfyResult(result, e.message, false); }
+  finally { if (btn) { btn.textContent='Send Test to My Phone Now'; btn.disabled=false; } }
+}
+function showNtfyResult(el, msg, ok) {
+  if (!el) return;
+  el.textContent = msg; el.style.display = 'block';
+  el.style.color = ok?'#059669':'#DC2626';
+  el.style.background = ok?'#F0FDF4':'#FEF2F2';
+  el.style.border = `1px solid ${ok?'#A7F3D0':'#FECACA'}`;
+  el.style.borderRadius = '7px'; el.style.padding = '8px 12px'; el.style.fontSize = '11px';
+}
+
+// ═══════════════════════════════════════
+//  MODEL STATUS POLLING
+// ═══════════════════════════════════════
+async function checkModelStatus() {
+  if (!API) return;
+  try {
+    const s = await apiFetch('/api/status');
+    if (s.ready) { _modelReady = true; return; }
+    if (s.error) { showModelBanner('error', s.error); return; }
+    showModelBanner('loading');
+    document.querySelectorAll('.btn-primary,.btn-analyze-r').forEach(b => b.disabled = true);
+    _modelPollInt = setInterval(async () => {
+      try {
+        const st = await apiFetch('/api/status');
+        if (st.ready) {
+          _modelReady = true;
+          clearInterval(_modelPollInt); _modelPollInt = null;
+          showModelBanner('ready');
+          setTimeout(() => document.getElementById('modelBanner')?.remove(), 4000);
+          document.querySelectorAll('.btn-primary,.btn-analyze-r').forEach(b => b.disabled = false);
+        } else if (st.error) { clearInterval(_modelPollInt); _modelPollInt = null; showModelBanner('error', st.error); }
+      } catch(_) {}
+    }, 8000);
+  } catch(_) { _modelReady = true; }
+}
+function showModelBanner(state, detail) {
+  let el = document.getElementById('modelBanner');
+  if (!el) { el = document.createElement('div'); el.id='modelBanner';
+    el.style.cssText='display:flex;align-items:center;gap:12px;padding:13px 18px;border-radius:10px;margin-bottom:16px;font-size:12px;font-weight:600;border:1.5px solid;';
+    const main = document.querySelector('.main'); if (main) main.insertBefore(el, main.firstChild); }
+  const cfg = {
+    loading:{ bg:'#EEF2FF',border:'#C7D2FE',color:'#4361EE',icon:'⏳',title:'AI Model Loading...',msg:'Downloading AST (~2 min on first start). History works now.' },
+    ready:  { bg:'#D1FAE5',border:'#A7F3D0',color:'#059669',icon:'✅',title:'Model Ready',msg:'PFT-AST ready to analyze audio.' },
+    error:  { bg:'#FEE2E2',border:'#FECACA',color:'#DC2626',icon:'❌',title:'Model Failed',msg:detail||'Check HuggingFace logs.' },
+  };
+  const s = cfg[state]||cfg.error;
+  el.style.background=s.bg; el.style.borderColor=s.border; el.style.color=s.color;
+  el.innerHTML=`<span style="font-size:20px">${s.icon}</span><div><div style="font-size:13px;font-weight:700">${s.title}</div><div style="font-size:10px;color:#64748B">${s.msg}</div></div>`;
+}
+
+// ═══════════════════════════════════════
+//  HISTORY MODAL
+// ═══════════════════════════════════════
+async function openHistoryModal(id) {
+  const modal = document.getElementById('histModal');
+  const body  = document.getElementById('histModalBody');
+  if (!modal||!body) return;
+  modal.classList.add('open'); document.body.style.overflow = 'hidden';
+  body.innerHTML = `<div style="padding:60px;text-align:center;color:#64748B">Loading analysis #${id}...</div>`;
+  try {
+    const data = await apiFetch(`/api/history/${id}`);
+    if (data.error) { body.innerHTML=`<div style="padding:40px;text-align:center;color:#DC2626">Error: ${data.error}</div>`; return; }
+    renderHistModalContent(data, id);
+  } catch(e) { body.innerHTML=`<div style="padding:40px;text-align:center;color:#DC2626">Failed: ${e.message}</div>`; }
+}
+function closeHistoryModal() {
+  document.getElementById('histModal')?.classList.remove('open');
+  document.body.style.overflow = '';
+}
+function renderHistModalContent(data, id) {
+  const body  = document.getElementById('histModalBody');
+  const risk  = data.risk || 'SAFE';
+  const pct   = (data.threat_score*100||0).toFixed(1);
+  const isT   = data.threat_detected;
+  const loc   = data.location ? `Location: ${data.location}` : 'Location not recorded';
+  const did   = data.device_id || 'unknown';
+
+  // Context verdict panel
+  const cv = data.context_verdict;
+  const cvHtml = cv ? `
+    <div class="hm-card" style="margin-top:14px;border-color:${cv.action==='ALERT'?'#FECACA':cv.action==='DISMISS'?'#A7F3D0':'#FDE68A'}">
+      <div class="hm-card-title">LLM CONTEXT VERDICT</div>
+      <div style="padding:12px 16px">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:800;padding:4px 12px;border-radius:20px;background:${cv.action==='ALERT'?'#DC2626':cv.action==='DISMISS'?'#059669':'#D97706'};color:#fff">${cv.action}</span>
+          <span style="font-size:11px;color:#64748B">${cv.pattern_label||''}</span>
+          <span style="font-size:11px;color:#64748B;margin-left:auto">Confidence: ${((cv.confidence||0)*100).toFixed(0)}%</span>
+        </div>
+        <div style="font-size:12px;color:#334155">${cv.reasoning||''}</div>
+      </div>
+    </div>` : '';
+
+  body.innerHTML = `
+    <div class="hm-header ${isT?'threat':'safe'}">
+      <div class="hm-hinfo">
+        <div class="hm-risk-badge r-${risk.toLowerCase()}">${isT?'⚠ ':'✓ '}${risk}</div>
+        <div class="hm-title">Analysis #${id}</div>
+        <div class="hm-meta">${data.date||''} ${data.time||''} · ${data.source||'upload'} · ${data.duration||'—'}s</div>
+      </div>
+      <div class="hm-score-big">${pct}%</div>
+    </div>
+    <div class="hm-device-row"><span>Device: ${did}</span><span>${loc}</span><span>${data.date||''} ${data.time||''}</span></div>
+    <div class="hm-grid2" style="margin-top:14px">
+      <div class="hm-card"><div class="hm-card-title">THREAT SCORE</div>
+        <div style="padding:16px;display:flex;align-items:center;gap:16px">
+          <canvas id="hmGauge" width="90" height="90"></canvas>
+          <div><div style="font-size:36px;font-weight:800;color:${isT?'#DC2626':risk==='MEDIUM'?'#D97706':'#059669'}">${pct}%</div>
+          <div style="font-size:10px;color:#64748B;margin-top:4px">τ = 0.75 (paper)</div></div>
+        </div>
+      </div>
+      <div class="hm-card"><div class="hm-card-title">TOP AUDIO CLASSES</div><div id="hmClasses" style="padding:12px 16px"></div></div>
+    </div>
+    ${data.spectrogram ? `<div class="hm-grid2" style="margin-top:14px">
+      <div class="hm-card"><div class="hm-card-title">SPECTROGRAM</div><div class="img-wrap"><img src="data:image/png;base64,${data.spectrogram}" style="width:100%;border-radius:6px"></div></div>
+    </div>` : ''}
+    ${cv ? cvHtml : '<div style="padding:10px 0;font-size:11px;color:#94A3B8">Context verdict: pending or unavailable</div>'}
+  `;
+  setTimeout(() => {
+    drawMiniGauge('hmGauge', data.threat_score || 0);
+    if (data.all_sounds) renderClasses(data.all_sounds, 'hmClasses', 10);
+  }, 50);
+}
+
+// ═══════════════════════════════════════
+//  CONTINUOUS LIVE RECORDING
+// ═══════════════════════════════════════
+function switchRecMode(mode) {
+  document.getElementById('recModeSnap').style.display = mode==='snap' ? '' : 'none';
+  document.getElementById('recModeLive').style.display = mode==='live' ? '' : 'none';
+  document.getElementById('modeSnap').classList.toggle('on', mode==='snap');
+  document.getElementById('modeLive').classList.toggle('on', mode==='live');
+  if (mode==='snap' && _liveActive) stopLiveRec();
+}
+async function startLiveRec() {
+  try {
+    _liveStream = await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1,echoCancellation:true}});
+  } catch(e) { alert('Mic access denied: '+e.message); return; }
+  _liveActive=true; _liveChunkN=0;
+  document.getElementById('btnLiveRec').textContent = 'Stop Live';
+  document.getElementById('btnLiveRec').classList.add('on');
+  document.getElementById('liveStatusBadge').style.display = 'flex';
+  const feed = document.getElementById('liveChunkFeed'); if (feed) feed.innerHTML='';
+  startNextChunk();
+}
+function startNextChunk() {
+  if (!_liveActive) return;
+  _liveChunkN++;
+  const chunkN = _liveChunkN;
+  const chunks = [];
+  const mime   = getMime();
+  set('liveChunkLabel', `Analyzing chunk #${chunkN}...`);
+  const rec = new MediaRecorder(_liveStream, {mimeType: mime});
+  rec.ondataavailable = e => { if (e.data.size>0) chunks.push(e.data); };
+  rec.onstop = async () => {
+    if (!_liveActive && chunkN > 1) return;
+    const blob = new Blob(chunks, {type: mime||'audio/webm'});
+    if (blob.size < 1000) { if (_liveActive) startNextChunk(); return; }
+    addLiveChunkPending(chunkN);
+    try {
+      const ext = mime.includes('ogg')?'ogg':'webm';
+      const fd  = new FormData();
+      fd.append('audio', new File([blob], `live_chunk_${chunkN}.${ext}`, {type:mime}));
+      fd.append('source', 'live');
+      fd.append('device_id', _deviceId||'');
+      fd.append('location', getLocationString());
+      const data = await apiPredict(fd);
+      if (data.error) { updateLiveChunk(chunkN, null, data.error); }
+      else {
+        data.chunk_n = chunkN;
+        updateLiveChunk(chunkN, data);
+        showResult(data);
+        if (data.threat_detected) showBrowserNotif(data);
+      }
+    } catch(e) { updateLiveChunk(chunkN, null, e.message); }
+    if (_liveActive) startNextChunk();
+  };
+  rec.start();
+  setTimeout(() => { if (rec.state==='recording') rec.stop(); }, 10000);
+}
+function stopLiveRec() {
+  _liveActive=false;
+  if (_liveStream) { _liveStream.getTracks().forEach(t=>t.stop()); _liveStream=null; }
+  stopRecViz();
+  if (document.getElementById('btnLiveRec')) {
+    document.getElementById('btnLiveRec').textContent = 'Start Live Analysis';
+    document.getElementById('btnLiveRec').classList.remove('on');
+  }
+  document.getElementById('liveStatusBadge').style.display = 'none';
+  set('liveChunkLabel', `Done — ${_liveChunkN} chunk(s) analyzed`);
+}
+function addLiveChunkPending(n) {
+  const feed = document.getElementById('liveChunkFeed'); if (!feed) return;
+  const el   = document.createElement('div');
+  el.className='live-chunk-row pending'; el.id=`lc-${n}`;
+  el.innerHTML=`<div class="lc-n">#${n}</div><div class="lc-info"><div class="lc-label">Analyzing...</div><div class="lc-bar-bg"><div class="lc-bar" style="width:0%"></div></div></div><div class="lc-score">—</div>`;
+  feed.insertBefore(el, feed.firstChild);
+  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+function updateLiveChunk(n, data, err) {
+  const el = document.getElementById(`lc-${n}`); if (!el) return;
+  if (err||!data) { el.className='live-chunk-row error'; el.querySelector('.lc-label').textContent=err||'Error'; return; }
+  const pct  = (data.threat_score*100).toFixed(1);
+  const risk = data.risk||'SAFE';
+  const cls  = data.threat_detected ? 'threat' : (data.threat_score>=0.20 ? 'medium' : 'safe');
+  el.className=`live-chunk-row ${cls}`;
+  el.querySelector('.lc-label').textContent = data.all_sounds?.[0]?.label||'—';
+  el.querySelector('.lc-bar').style.width = Math.min(data.threat_score*100,100)+'%';
+  el.querySelector('.lc-bar').className = `lc-bar ${cls}`;
+  el.querySelector('.lc-score').innerHTML = `<span class="rtag r-${risk.toLowerCase()}">${pct}%</span>`;
+}
+
 function connectSocket() {
+  checkModelStatus();
   _socket = io(API, { transports: ['websocket','polling'], reconnectionDelay: 2000 });
   _socket.on('connect',    () => setConn(true));
   _socket.on('disconnect', () => setConn(false));
@@ -208,6 +525,9 @@ async function apiPost(path, body) {
   return r.json();
 }
 async function apiPredict(formData) {
+  // Attach device info to every prediction
+  if (!formData.has('device_id') && _deviceId) formData.append('device_id', _deviceId);
+  if (!formData.has('location')) formData.append('location', getLocationString());
   const r = await fetch(API + '/api/predict', { method: 'POST', body: formData });
   return r.json();
 }
@@ -537,15 +857,16 @@ function renderHistTable(rows) {
   if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:28px">No analyses yet.</div>'; return; }
   const rTag = r => `<span class="rtag r-${r.toLowerCase()}">${r}</span>`;
   el.innerHTML = `
-    <div class="h-hd"><div>#</div><div>Top Class</div><div>Score</div><div>Risk</div><div>Source</div><div>Time</div></div>
+    <div class="h-hd"><div>#</div><div>Top Class</div><div>Score</div><div>Risk</div><div>Source</div><div>Time</div><div>Details</div></div>
     ${rows.map(r=>`
-    <div class="h-row${r.threat?' thr':''}" onclick="location.href='/'">
+    <div class="h-row${r.threat?' thr':''}" onclick="openHistoryModal(${r.id})" style="cursor:pointer">
       <div class="h-id">${r.id}</div>
       <div class="h-cls">${r.top_class||'—'}</div>
       <div class="h-sc">${(r.score*100).toFixed(1)}%</div>
       <div>${rTag(r.risk)}</div>
       <div><span class="s-tag">${r.source||'upload'}</span></div>
       <div class="h-time">${r.date||''} ${r.time||''}</div>
+      <div><button class="h-view-btn" onclick="event.stopPropagation();openHistoryModal(${r.id})">View</button></div>
     </div>`).join('')}`;
 }
 
@@ -553,6 +874,7 @@ function renderHistTable(rows) {
 //  ALERTS PAGE
 // ═══════════════════════════════════════════════════════════════
 async function initAlerts() {
+  initNtfy();
   checkSub();
   try {
     const data = await apiFetch('/api/alerts');
