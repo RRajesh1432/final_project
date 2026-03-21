@@ -307,15 +307,86 @@ function hideLoader() {
 // ═══════════════════════════════════════════════════════════════
 //  DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-function initDash() {}
+async function initDash() {
+  // Load last analysis from history to populate panels on page load
+  try {
+    const hist = await apiFetch('/api/history?limit=5');
+    if (hist && hist.length > 0) {
+      // Get full detail of the most recent analysis
+      const latest = await apiFetch('/api/history/' + hist[0].id);
+      if (latest && !latest.error) {
+        renderDash(latest);
+        renderDashLastAnalysis(latest);
+      }
+    }
+    // Populate the live feed with recent items
+    if (hist && hist.length > 0) {
+      hist.slice().reverse().forEach(r => {
+        addFeedRow({
+          all_sounds: [{label: r.top_class || '—'}],
+          threat_detected: !!r.threat,
+          threat_score: r.score || 0,
+          source: r.source || 'upload',
+          _time: r.date + ' ' + r.time,
+          id: r.id,
+        });
+      });
+    }
+  } catch(e) { console.warn('[dash] Could not load history:', e); }
+}
+
+function renderDashLastAnalysis(data) {
+  const el = document.getElementById('lastAnalysisCard');
+  if (!el) return;
+  el.style.display = 'block';
+  const risk  = data.risk || 'SAFE';
+  const score = data.threat_score || data.score || 0;
+  const pct   = (score * 100).toFixed(1);
+  const isT   = data.threat_detected || data.threat;
+  const rClr  = isT ? '#DC2626' : risk === 'MEDIUM' ? '#D97706' : '#059669';
+  const top   = data.top_class || (data.all_sounds || [])[0]?.label || '—';
+  el.innerHTML = `
+    <div class="card-hd" style="display:flex;align-items:center;justify-content:space-between">
+      <span class="card-title">LAST ANALYSIS</span>
+      <span style="font-size:9px;color:var(--t3)">${data.date||''} ${data.time||''}</span>
+    </div>
+    <div style="padding:12px 16px 14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:180px">
+        <div style="font-size:32px;font-weight:900;font-family:'Orbitron',monospace;color:${rClr}">${pct}%</div>
+        <div>
+          <span style="font-size:11px;font-weight:800;padding:3px 12px;border-radius:14px;background:${rClr}20;color:${rClr};border:1px solid ${rClr}40">${isT?'⚠ ':''}${risk}</span>
+          <div style="font-size:10px;color:var(--t2);margin-top:5px;font-weight:600">${top}</div>
+          <div style="font-size:9px;color:var(--t3);margin-top:2px">Source: ${data.source||'upload'} · ${data.duration||'—'}s · ID #${data.id||''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${(data.threat_detail || data.multi_threat || []).slice(0,5).map(t => {
+          const p = t.pct !== undefined ? t.pct : (t.score||0)*100;
+          const lbl = t.class || t.label || '—';
+          const clr = p>=25?'#DC2626':p>=10?'#D97706':'rgba(0,229,255,.4)';
+          return `<div style="text-align:center;min-width:52px">
+            <div style="font-size:11px;font-weight:700;color:${clr}">${p.toFixed(0)}%</div>
+            <div style="font-size:8px;color:var(--t3);text-transform:capitalize;margin-top:2px">${lbl}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button onclick="openHistoryModal(${data.id})" style="font-size:10px;font-weight:700;padding:7px 14px;border-radius:8px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);cursor:pointer">Full Report ↗</button>
+    </div>`;
+}
 
 function renderDash(data) {
-  drawGauge(data.threat_score, data.risk);
-  renderSpec(data.spectrogram);
-  renderClasses(data.all_sounds, 'clsList', 12);
-  drawProbChart(data.frames);
-  renderThrBreak(data.threat_detail || data.multi_threat);
-  renderTimeline(data.frames);
+  // Map full_result fields → dashboard fields
+  const score = data.threat_score || data.score || 0;
+  const risk  = data.risk || (score >= 0.75 ? 'HIGH' : score >= 0.3 ? 'MEDIUM' : 'SAFE');
+  drawGauge(score, risk);
+  if (data.spectrogram)  renderSpec(data.spectrogram);
+  if (data.all_sounds)   renderClasses(data.all_sounds, 'clsList', 12);
+  if (data.frames)       { drawProbChart(data.frames); renderTimeline(data.frames); }
+  const threats = data.threat_detail || data.multi_threat;
+  if (threats)           renderThrBreak(threats);
+  // Update gauge risk label from history format
+  const gr = document.getElementById('gaugeRisk');
+  if (gr && risk) { gr.textContent = risk; gr.className = 'gauge-risk' + (risk==='HIGH'?' danger':risk==='MEDIUM'?' medium':''); }
 }
 
 function addFeedRow(data) {
@@ -326,11 +397,14 @@ function addFeedRow(data) {
   const top = data.all_sounds?.[0]?.label || '—';
   const t   = data.threat_detected;
   const src = data.source || 'upload';
+  const timeStr = data._time || new Date().toLocaleTimeString();
   const el  = document.createElement('div');
   el.className = `feed-row${t ? ' thr' : ''}`;
+  el.style.cursor = data.id ? 'pointer' : '';
+  if (data.id) el.onclick = () => openHistoryModal(data.id);
   el.innerHTML = `
     <div class="fd${t?' thr':''}"></div>
-    <div class="fi"><div class="fc">${top}</div><div class="fm">${t?'⚠ THREAT · ':''}${new Date().toLocaleTimeString()}</div></div>
+    <div class="fi"><div class="fc">${top}</div><div class="fm">${t?'⚠ THREAT · ':''}${timeStr}</div></div>
     <div class="fs-n${t?' thr':''}">${(data.threat_score*100).toFixed(1)}%</div>
     <span class="f-src ${src}">${src}</span>`;
   list.insertBefore(el, list.firstChild);

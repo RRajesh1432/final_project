@@ -6,9 +6,7 @@
 <meta name="theme-color" content="#060c17">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PFT-AST">
-<meta name="description" content="Real-time acoustic threat detection dashboard">
 <title>PFT-AST · Dashboard</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -16,203 +14,133 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-/* ── Dashboard extra styles ── */
-.hero-banner {
-  background: linear-gradient(135deg, rgba(67,97,238,.12) 0%, rgba(0,229,255,.06) 100%);
-  border: 1px solid rgba(67,97,238,.2);
-  border-radius: 14px;
-  padding: 20px 22px;
-  margin-bottom: 14px;
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.hero-logo {
-  width: 56px; height: 56px; flex-shrink: 0;
-  background: rgba(67,97,238,.12);
-  border: 1px solid rgba(67,97,238,.3);
-  border-radius: 14px;
-  display: flex; align-items: center; justify-content: center;
-}
-.hero-text { flex: 1; min-width: 180px; }
-.hero-title { font-size: 18px; font-weight: 900; color: var(--t1); font-family: 'Orbitron', sans-serif; letter-spacing: 1px; margin-bottom: 4px; }
-.hero-sub   { font-size: 11px; color: var(--t3); line-height: 1.6; }
-.hero-action {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 10px 20px; border-radius: 10px;
-  background: var(--teal); color: #fff;
-  font-size: 12px; font-weight: 700; text-decoration: none;
-  letter-spacing: .5px; white-space: nowrap;
-  transition: opacity .2s;
-}
-.hero-action:hover { opacity: .85; }
+/* ── Dashboard Rich Styles ── */
+
+/* Section label */
+.sec-lbl { font-size:9px;letter-spacing:2.5px;color:var(--t3);text-transform:uppercase;margin-bottom:8px;padding-left:2px;display:flex;align-items:center;gap:8px }
+.sec-lbl::after { content:'';flex:1;height:1px;background:var(--b1) }
+
+/* Hero */
+.hero { background:linear-gradient(135deg,rgba(67,97,238,.1) 0%,rgba(0,229,255,.04) 100%);border:1px solid rgba(67,97,238,.18);border-radius:14px;padding:20px 22px;margin-bottom:16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap }
+.hero-logo { width:52px;height:52px;flex-shrink:0;background:rgba(67,97,238,.12);border:1px solid rgba(67,97,238,.28);border-radius:13px;display:flex;align-items:center;justify-content:center }
+.hero-txt { flex:1;min-width:200px }
+.hero-name { font-size:20px;font-weight:900;color:var(--t1);font-family:'Orbitron',sans-serif;letter-spacing:2px;margin-bottom:5px }
+.hero-desc { font-size:11px;color:var(--t3);line-height:1.7 }
+.hero-desc strong { color:var(--t2) }
+.hero-btn { display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:10px;background:var(--teal);color:#fff;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;transition:opacity .2s;letter-spacing:.5px }
+.hero-btn:hover { opacity:.82 }
+
+/* Quick actions row */
+.qrow { display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px }
+.qa { display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:11px;border:1px solid var(--b1);background:var(--bg1);text-decoration:none;transition:border-color .2s }
+.qa:hover { border-color:rgba(67,97,238,.35) }
+.qa-icon { font-size:20px;flex-shrink:0 }
+.qa-title { font-size:11px;font-weight:700;color:var(--t1) }
+.qa-sub { font-size:9px;color:var(--t3);margin-top:2px;line-height:1.4 }
+
+/* Info grid 2-col */
+.info-2col { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px }
 
 /* How it works */
-.how-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-.how-step {
-  background: var(--bg1); border: 1px solid var(--b1);
-  border-radius: 12px; padding: 14px 14px 16px;
-  position: relative; overflow: hidden;
-}
-.how-step::before {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(135deg, rgba(67,97,238,.04) 0%, transparent 60%);
-}
-.how-num {
-  font-size: 9px; font-weight: 800; letter-spacing: 2px; color: var(--teal);
-  margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
-}
-.how-num-circle {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: rgba(67,97,238,.12); border: 1px solid rgba(67,97,238,.25);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 900; color: var(--teal);
-}
-.how-icon { font-size: 22px; margin-bottom: 8px; display: block; }
-.how-title { font-size: 11px; font-weight: 700; color: var(--t1); margin-bottom: 4px; }
-.how-desc  { font-size: 9px; color: var(--t3); line-height: 1.6; }
+.how-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 14px 14px }
+.how-card { padding:12px;border-radius:10px;background:var(--bg2);border:1px solid var(--b1) }
+.how-num { display:flex;align-items:center;gap:6px;margin-bottom:8px }
+.how-num-badge { width:20px;height:20px;border-radius:50%;background:rgba(67,97,238,.12);border:1px solid rgba(67,97,238,.22);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:var(--teal) }
+.how-step-lbl { font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--teal) }
+.how-icon { font-size:20px;margin-bottom:6px;display:block }
+.how-title { font-size:10px;font-weight:700;color:var(--t1);margin-bottom:4px }
+.how-desc { font-size:9px;color:var(--t3);line-height:1.55 }
 
-/* Threat classes explainer */
-.threat-class-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 12px 14px 14px; }
-.tc-card {
-  padding: 12px 10px; border-radius: 10px;
-  border: 1px solid rgba(255,23,68,.15);
-  background: rgba(255,23,68,.04);
-  text-align: center;
-}
-.tc-icon  { font-size: 20px; margin-bottom: 6px; display: block; }
-.tc-name  { font-size: 10px; font-weight: 700; color: var(--red2); margin-bottom: 4px; }
-.tc-desc  { font-size: 9px; color: var(--t3); line-height: 1.5; }
+/* Pipeline */
+.pipeline { display:flex;align-items:center;overflow-x:auto;padding:0 14px 14px;gap:0;-webkit-overflow-scrolling:touch }
+.ps { flex-shrink:0;text-align:center;padding:8px 10px;min-width:80px }
+.ps-ic { width:32px;height:32px;border-radius:9px;margin:0 auto 5px;display:flex;align-items:center;justify-content:center;font-size:14px;background:rgba(67,97,238,.09);border:1px solid rgba(67,97,238,.18) }
+.ps-n { font-size:9px;font-weight:700;color:var(--t2);margin-bottom:2px }
+.ps-d { font-size:8px;color:var(--t3) }
+.pa { font-size:14px;color:rgba(67,97,238,.35);flex-shrink:0;margin:0 2px }
+
+/* Threat classes */
+.tc-grid { display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px 14px 14px }
+.tc { padding:11px 8px;border-radius:9px;border:1px solid rgba(220,38,38,.15);background:rgba(220,38,38,.04);text-align:center }
+.tc-icon { font-size:18px;margin-bottom:5px;display:block }
+.tc-name { font-size:10px;font-weight:700;color:var(--red2);margin-bottom:3px }
+.tc-desc { font-size:8px;color:var(--t3);line-height:1.45 }
 
 /* Score guide */
-.score-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 14px 14px; }
-.sg-card {
-  padding: 12px; border-radius: 10px; text-align: center;
-}
-.sg-card.safe   { background: rgba(5,150,105,.06);  border: 1px solid rgba(5,150,105,.2); }
-.sg-card.medium { background: rgba(217,119,6,.06);  border: 1px solid rgba(217,119,6,.2); }
-.sg-card.high   { background: rgba(220,38,38,.06);  border: 1px solid rgba(220,38,38,.2); }
-.sg-range  { font-size: 18px; font-weight: 900; font-family: 'Orbitron', monospace; margin-bottom: 4px; }
-.sg-label  { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 5px; }
-.sg-desc   { font-size: 9px; color: var(--t3); line-height: 1.5; }
-.sg-card.safe   .sg-range, .sg-card.safe   .sg-label { color: #059669; }
-.sg-card.medium .sg-range, .sg-card.medium .sg-label { color: #d97706; }
-.sg-card.high   .sg-range, .sg-card.high   .sg-label { color: #dc2626; }
+.sg-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 14px 14px }
+.sg { padding:12px 10px;border-radius:9px;text-align:center }
+.sg.safe { background:rgba(5,150,105,.06);border:1px solid rgba(5,150,105,.2) }
+.sg.med  { background:rgba(217,119,6,.06);border:1px solid rgba(217,119,6,.2) }
+.sg.hi   { background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2) }
+.sg-range { font-size:16px;font-weight:900;font-family:'Orbitron',monospace;margin-bottom:3px }
+.sg-lbl { font-size:9px;font-weight:800;letter-spacing:1.5px;margin-bottom:5px }
+.sg-desc { font-size:8px;color:var(--t3);line-height:1.5 }
+.sg.safe .sg-range,.sg.safe .sg-lbl { color:#059669 }
+.sg.med  .sg-range,.sg.med  .sg-lbl { color:#d97706 }
+.sg.hi   .sg-range,.sg.hi   .sg-lbl { color:#dc2626 }
+.sg-note { padding:0 14px 12px;font-size:9px;color:var(--t3);line-height:1.6 }
 
-/* Paper metrics strip */
-.metrics-strip {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-  padding: 12px 14px 14px;
-}
-.ms-item { text-align: center; }
-.ms-val  { font-size: 22px; font-weight: 900; font-family: 'Orbitron', monospace; color: var(--teal); }
-.ms-lbl  { font-size: 9px; color: var(--t3); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+/* Result guide */
+.rg-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 14px 14px }
+.rg { padding:10px 11px;border-radius:8px;background:var(--bg2);border:1px solid var(--b1) }
+.rg-title { font-size:10px;font-weight:700;color:var(--t1);margin-bottom:3px;display:flex;align-items:center;gap:5px }
+.rg-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0 }
+.rg-desc { font-size:9px;color:var(--t3);line-height:1.55 }
 
-/* Pipeline steps */
-.pipeline { display: flex; align-items: center; gap: 0; padding: 12px 14px 14px; overflow-x: auto; }
-.pipe-step {
-  flex-shrink: 0; text-align: center; padding: 10px 12px;
-  min-width: 90px;
-}
-.pipe-step-ic {
-  width: 36px; height: 36px; border-radius: 10px; margin: 0 auto 7px;
-  display: flex; align-items: center; justify-content: center; font-size: 16px;
-  background: rgba(67,97,238,.1); border: 1px solid rgba(67,97,238,.2);
-}
-.pipe-step-name { font-size: 9px; font-weight: 700; color: var(--t2); margin-bottom: 3px; }
-.pipe-step-desc { font-size: 8px; color: var(--t3); line-height: 1.4; }
-.pipe-arrow { font-size: 16px; color: rgba(67,97,238,.4); flex-shrink: 0; margin: 0 2px; }
+/* Metrics */
+.ms-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:12px 14px 10px }
+.ms { text-align:center;padding:8px }
+.ms-val { font-size:20px;font-weight:900;font-family:'Orbitron',monospace;color:var(--teal) }
+.ms-lbl { font-size:8px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-top:2px }
 
-/* Result reading guide */
-.rg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 14px 14px; }
-.rg-item {
-  padding: 10px 12px; border-radius: 8px;
-  background: var(--bg2); border: 1px solid var(--b1);
-}
-.rg-title { font-size: 10px; font-weight: 700; color: var(--t1); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
-.rg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.rg-desc  { font-size: 9px; color: var(--t3); line-height: 1.55; }
+/* Pages nav cards */
+.pages-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:10px 14px 14px }
+.pg-card { padding:12px;border-radius:9px;background:var(--bg2);border:1px solid var(--b1);text-decoration:none;display:block;transition:border-color .2s }
+.pg-card:hover { border-color:rgba(67,97,238,.35) }
+.pg-icon { font-size:20px;margin-bottom:7px }
+.pg-title { font-size:11px;font-weight:700;color:var(--t1);margin-bottom:4px }
+.pg-desc { font-size:9px;color:var(--t3);line-height:1.5 }
 
-/* Quick start CTA */
-.qstart {
-  background: linear-gradient(135deg, rgba(67,97,238,.08), rgba(0,229,255,.04));
-  border: 1px solid rgba(67,97,238,.2);
-  border-radius: 12px; padding: 16px 18px;
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.qstart-text { flex: 1; min-width: 160px; }
-.qstart-title { font-size: 13px; font-weight: 700; color: var(--t1); margin-bottom: 3px; }
-.qstart-sub   { font-size: 10px; color: var(--t3); }
-.qstart-btns  { display: flex; gap: 8px; flex-wrap: wrap; }
-.qstart-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 9px 16px; border-radius: 8px; font-size: 11px; font-weight: 700;
-  text-decoration: none; cursor: pointer; border: none;
-  transition: opacity .2s; white-space: nowrap;
-}
-.qstart-btn.primary { background: var(--teal); color: #fff; }
-.qstart-btn.secondary { background: var(--bg2); color: var(--t2); border: 1px solid var(--b2); }
-.qstart-btn:hover { opacity: .8; }
+/* Dataset pills */
+.dpills { display:flex;gap:7px;flex-wrap:wrap;padding:4px 14px 14px }
+.dp { font-size:9px;font-weight:600;padding:3px 10px;border-radius:14px;background:rgba(67,97,238,.08);color:var(--teal);border:1px solid rgba(67,97,238,.18) }
 
-/* Dataset info */
-.dataset-pills { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 14px 14px; }
-.dpill {
-  font-size: 10px; font-weight: 600; padding: 4px 12px; border-radius: 20px;
-  background: rgba(67,97,238,.08); color: var(--teal);
-  border: 1px solid rgba(67,97,238,.2);
+/* Last analysis bar */
+#lastAnalysisCard { display:none }
+
+@media(max-width:900px){
+  .how-grid{grid-template-columns:1fr 1fr}
+  .tc-grid{grid-template-columns:repeat(3,1fr)}
+  .info-2col{grid-template-columns:1fr}
+  .qrow{grid-template-columns:1fr}
+  .ms-grid{grid-template-columns:1fr 1fr}
 }
-
-/* Two-col layout */
-.db-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-
-/* Live analysis area */
-.live-area { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-
-@media (max-width: 900px) {
-  .how-grid { grid-template-columns: 1fr 1fr; }
-  .threat-class-grid { grid-template-columns: repeat(3, 1fr); }
-  .db-two-col { grid-template-columns: 1fr; }
-  .live-area { grid-template-columns: 1fr; }
-  .metrics-strip { grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 600px) {
-  .how-grid { grid-template-columns: 1fr; }
-  .threat-class-grid { grid-template-columns: 1fr 1fr; }
-  .score-guide { grid-template-columns: 1fr; }
-  .rg-grid { grid-template-columns: 1fr; }
-  .hero-banner { flex-direction: column; text-align: center; }
-  .metrics-strip { grid-template-columns: 1fr 1fr; }
+@media(max-width:600px){
+  .how-grid{grid-template-columns:1fr}
+  .tc-grid{grid-template-columns:1fr 1fr}
+  .sg-grid{grid-template-columns:1fr}
+  .rg-grid{grid-template-columns:1fr}
+  .hero{flex-direction:column;text-align:center}
+  .pages-grid{grid-template-columns:1fr}
+  .ms-grid{grid-template-columns:1fr 1fr}
 }
 </style>
 </head>
 <body>
 <div class="overlay" id="overlay" onclick="closeNav()"></div>
 
-<!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-top">
-    <div class="logo-mark">
-      <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-        <circle cx="17" cy="17" r="15" stroke="#00e5ff" stroke-width="1" opacity=".2"/>
-        <circle cx="17" cy="17" r="9"  stroke="#00e5ff" stroke-width="1" opacity=".5"/>
-        <circle cx="17" cy="17" r="3"  fill="#00e5ff"/>
-        <line x1="17" y1="2"  x2="17" y2="8"  stroke="#00e5ff" stroke-width="1.5"/>
-        <line x1="17" y1="26" x2="17" y2="32" stroke="#00e5ff" stroke-width="1.5"/>
-        <line x1="2"  y1="17" x2="8"  y2="17" stroke="#00e5ff" stroke-width="1.5"/>
-        <line x1="26" y1="17" x2="32" y2="17" stroke="#00e5ff" stroke-width="1.5"/>
-      </svg>
-    </div>
+    <div class="logo-mark"><svg width="34" height="34" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="17" r="15" stroke="#00e5ff" stroke-width="1" opacity=".2"/><circle cx="17" cy="17" r="9" stroke="#00e5ff" stroke-width="1" opacity=".5"/><circle cx="17" cy="17" r="3" fill="#00e5ff"/><line x1="17" y1="2" x2="17" y2="8" stroke="#00e5ff" stroke-width="1.5"/><line x1="17" y1="26" x2="17" y2="32" stroke="#00e5ff" stroke-width="1.5"/><line x1="2" y1="17" x2="8" y2="17" stroke="#00e5ff" stroke-width="1.5"/><line x1="26" y1="17" x2="32" y2="17" stroke="#00e5ff" stroke-width="1.5"/></svg></div>
     <div><div class="app-name">PFT-AST</div><div class="app-tag">Threat Intelligence</div></div>
     <button class="sidebar-close" onclick="closeNav()">✕</button>
   </div>
   <div class="live-pill" id="livePill"><span class="live-dot" id="liveDot"></span><span id="liveLabel">CONNECTING...</span></div>
   <nav class="sidebar-nav">
-    <a href="/"                    class="nav-a on" data-p="dashboard"><svg class="nav-ic" viewBox="0 0 18 18" fill="currentColor"><rect x="1" y="1" width="7" height="7" rx="1.5"/><rect x="10" y="1" width="7" height="7" rx="1.5"/><rect x="1" y="10" width="7" height="7" rx="1.5"/><rect x="10" y="10" width="7" height="7" rx="1.5"/></svg>Dashboard</a>
-    <a href="/pages/analyze.html"  class="nav-a" data-p="analyze"><svg class="nav-ic" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="7" r="3.5"/><path d="M4 12c0 3.8 10 3.8 10 0"/><line x1="9" y1="15" x2="9" y2="17"/></svg>Analyze Audio</a>
-    <a href="/pages/history.html"  class="nav-a" data-p="history"><svg class="nav-ic" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="7"/><polyline points="9,5 9,9 12,11"/></svg>History</a>
-    <a href="/pages/alerts.html"   class="nav-a" data-p="alerts"><svg class="nav-ic" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 2a5 5 0 0 0-5 5v4l-1.5 2h13L14 11V7a5 5 0 0 0-5-5z"/><path d="M7 15a2 2 0 0 0 4 0"/></svg>Alerts<span class="nav-badge" id="navAlertBadge">0</span></a>
+    <a href="/" class="nav-a on" data-p="dashboard"><svg class="nav-ic" viewBox="0 0 18 18" fill="currentColor"><rect x="1" y="1" width="7" height="7" rx="1.5"/><rect x="10" y="1" width="7" height="7" rx="1.5"/><rect x="1" y="10" width="7" height="7" rx="1.5"/><rect x="10" y="10" width="7" height="7" rx="1.5"/></svg>Dashboard</a>
+    <a href="/pages/analyze.html" class="nav-a" data-p="analyze"><svg class="nav-ic" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="7" r="3.5"/><path d="M4 12c0 3.8 10 3.8 10 0"/><line x1="9" y1="15" x2="9" y2="17"/></svg>Analyze Audio</a>
+    <a href="/pages/history.html" class="nav-a" data-p="history"><svg class="nav-ic" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="7"/><polyline points="9,5 9,9 12,11"/></svg>History</a>
+    <a href="/pages/alerts.html" class="nav-a" data-p="alerts"><svg class="nav-ic" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 2a5 5 0 0 0-5 5v4l-1.5 2h13L14 11V7a5 5 0 0 0-5-5z"/><path d="M7 15a2 2 0 0 0 4 0"/></svg>Alerts<span class="nav-badge" id="navAlertBadge">0</span></a>
   </nav>
   <div class="sidebar-info">
     <div class="info-hdr">Model Config</div>
@@ -227,16 +155,14 @@
   </div>
 </aside>
 
-<!-- Bottom Nav -->
 <nav class="bot-nav"><div class="bot-nav-inner">
-  <a href="/"                   class="bn on" data-p="dashboard"><svg class="bn-ic" viewBox="0 0 22 22" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5"/><rect x="13" y="1" width="8" height="8" rx="1.5"/><rect x="1" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>Dashboard</a>
+  <a href="/" class="bn on" data-p="dashboard"><svg class="bn-ic" viewBox="0 0 22 22" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5"/><rect x="13" y="1" width="8" height="8" rx="1.5"/><rect x="1" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>Dashboard</a>
   <a href="/pages/analyze.html" class="bn" data-p="analyze"><svg class="bn-ic" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="8" r="4"/><path d="M5 14c0 4.5 12 4.5 12 0"/><line x1="11" y1="18" x2="11" y2="21"/></svg>Analyze</a>
   <a href="/pages/history.html" class="bn" data-p="history"><svg class="bn-ic" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><polyline points="11,7 11,11 14,13"/></svg>History</a>
-  <a href="/pages/alerts.html"  class="bn" data-p="alerts"><svg class="bn-ic" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 2a6 6 0 0 0-6 6v5L3 16h16l-2-3V8a6 6 0 0 0-6-6z"/><path d="M8.5 18a2.5 2.5 0 0 0 5 0"/></svg>Alerts<span class="bn-bdg" id="bnAlertDot">0</span></a>
+  <a href="/pages/alerts.html" class="bn" data-p="alerts"><svg class="bn-ic" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 2a6 6 0 0 0-6 6v5L3 16h16l-2-3V8a6 6 0 0 0-6-6z"/><path d="M8.5 18a2.5 2.5 0 0 0 5 0"/></svg>Alerts<span class="bn-bdg" id="bnAlertDot">0</span></a>
 </div></nav>
 
 <div class="shell">
-<!-- Topbar -->
 <header class="topbar">
   <div class="topbar-l">
     <button class="hamburger" onclick="openNav()"><span></span><span></span><span></span></button>
@@ -253,45 +179,38 @@
 </header>
 
 <main class="main">
-  <!-- Model loading banner -->
   <div id="modelBanner" class="model-banner loading" style="display:none;padding:10px 16px;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:1px;margin-bottom:12px;"></div>
+  <div class="alert-banner" id="alertBanner"><span class="ab-icon">⚠</span><div class="ab-body"><div class="ab-title">ACOUSTIC THREAT DETECTED</div><div class="ab-detail" id="bannerDetail">—</div></div><button class="ab-close" onclick="closeBanner()">✕</button></div>
 
-  <!-- Threat alert banner -->
-  <div class="alert-banner" id="alertBanner">
-    <span class="ab-icon">⚠</span>
-    <div class="ab-body"><div class="ab-title">ACOUSTIC THREAT DETECTED</div><div class="ab-detail" id="bannerDetail">—</div></div>
-    <button class="ab-close" onclick="closeBanner()">✕</button>
-  </div>
-
-  <!-- ══ HERO BANNER ══ -->
-  <div class="hero-banner">
+  <!-- ═══ HERO ═══ -->
+  <div class="hero">
     <div class="hero-logo">
-      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-        <circle cx="14" cy="14" r="12" stroke="#4361EE" stroke-width="1.5" opacity=".4"/>
-        <circle cx="14" cy="14" r="7"  stroke="#4361EE" stroke-width="1.5" opacity=".7"/>
-        <circle cx="14" cy="14" r="2.5" fill="#4361EE"/>
-        <line x1="14" y1="2"  x2="14" y2="6"  stroke="#4361EE" stroke-width="1.8"/>
-        <line x1="14" y1="22" x2="14" y2="26" stroke="#4361EE" stroke-width="1.8"/>
-        <line x1="2"  y1="14" x2="6"  y2="14" stroke="#4361EE" stroke-width="1.8"/>
-        <line x1="22" y1="14" x2="26" y2="14" stroke="#4361EE" stroke-width="1.8"/>
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+        <circle cx="13" cy="13" r="11" stroke="#4361EE" stroke-width="1.5" opacity=".4"/>
+        <circle cx="13" cy="13" r="6"  stroke="#4361EE" stroke-width="1.5" opacity=".7"/>
+        <circle cx="13" cy="13" r="2"  fill="#4361EE"/>
+        <line x1="13" y1="2" x2="13" y2="5.5" stroke="#4361EE" stroke-width="1.8"/>
+        <line x1="13" y1="20.5" x2="13" y2="24" stroke="#4361EE" stroke-width="1.8"/>
+        <line x1="2" y1="13" x2="5.5" y2="13" stroke="#4361EE" stroke-width="1.8"/>
+        <line x1="20.5" y1="13" x2="24" y2="13" stroke="#4361EE" stroke-width="1.8"/>
       </svg>
     </div>
-    <div class="hero-text">
-      <div class="hero-title">PFT-AST</div>
-      <div class="hero-sub">
-        A real-time acoustic threat detection system built on a <strong>Partially Fine-Tuned Audio Spectrogram Transformer</strong>.
-        Upload or record any audio — the AI classifies it across 527 sound categories, then decides if it matches
-        known threat patterns like gunshots, explosions, screams, sirens, or breaking glass.
-        Results are instant, synced to all devices, and sent to your phone via ntfy.
+    <div class="hero-txt">
+      <div class="hero-name">PFT-AST</div>
+      <div class="hero-desc">
+        A real-time <strong>Acoustic Threat Detection</strong> system using a Partially Fine-Tuned Audio Spectrogram Transformer.
+        Upload or record any audio — the AI classifies it across <strong>527 sound categories</strong>, checks for 5 threat types
+        (gunshot, explosion, glass break, scream, siren), and alerts your phone instantly via ntfy when a threat is detected.
+        Results sync to all connected devices in real-time.
       </div>
     </div>
-    <a class="hero-action" href="/pages/analyze.html">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3,2 12,6.5 3,11"/></svg>
+    <a class="hero-btn" href="/pages/analyze.html">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><polygon points="2,1 11,6 2,11"/></svg>
       Analyze Audio
     </a>
   </div>
 
-  <!-- ══ LIVE STATS ══ -->
+  <!-- ═══ LIVE STATS ═══ -->
   <div class="stats-row" style="margin-bottom:14px">
     <div class="stat"><div class="stat-ic si-g"><svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="#00e676" stroke-width="1.5"><path d="M8.5 1L2 4.5v5c0 4 3 6.5 6.5 6.5S15 13.5 15 9.5v-5L8.5 1z"/><polyline points="5,9 8,12 13,7"/></svg></div><div><div class="stat-n" id="sTotal">0</div><div class="stat-l">Total Analyses</div></div></div>
     <div class="stat r"><div class="stat-ic si-r"><svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="#ff5252" stroke-width="1.5"><path d="M8.5 2L1 15h15L8.5 2z"/><line x1="8.5" y1="8" x2="8.5" y2="11"/><circle cx="8.5" cy="13.5" r=".7" fill="#ff5252"/></svg></div><div><div class="stat-n" id="sThreat">0</div><div class="stat-l">Threats Detected</div></div></div>
@@ -299,345 +218,221 @@
     <div class="stat"><div class="stat-ic si-y"><svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="#ffc107" stroke-width="1.5"><circle cx="8.5" cy="8.5" r="6.5"/><line x1="8.5" y1="5" x2="8.5" y2="8.5"/><line x1="8.5" y1="8.5" x2="11" y2="10.5"/></svg></div><div><div class="stat-n" id="sRate">0%</div><div class="stat-l">Threat Rate</div></div></div>
   </div>
 
-  <!-- ══ QUICK START ══ -->
-  <div class="qstart">
-    <div class="qstart-text">
-      <div class="qstart-title">🚀 Get started in seconds</div>
-      <div class="qstart-sub">Upload a WAV/MP3 or record live audio — results appear here in real-time on all connected devices</div>
-    </div>
-    <div class="qstart-btns">
-      <a class="qstart-btn primary" href="/pages/analyze.html">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><polygon points="2,1 11,6 2,11"/></svg>
-        Analyze Audio
-      </a>
-      <a class="qstart-btn secondary" href="/pages/alerts.html">
-        📳 Setup ntfy Alerts
-      </a>
-      <a class="qstart-btn secondary" href="/pages/history.html">
-        📋 View History
-      </a>
-    </div>
+  <!-- ═══ LAST ANALYSIS (auto-populated from history) ═══ -->
+  <div class="sec-lbl">Last Analysis</div>
+  <div class="card" id="lastAnalysisCard" style="margin-bottom:16px;display:none"></div>
+
+  <!-- ═══ QUICK ACTIONS ═══ -->
+  <div class="sec-lbl">Quick Actions</div>
+  <div class="qrow" style="margin-bottom:16px">
+    <a class="qa" href="/pages/analyze.html">
+      <span class="qa-icon">🎙</span>
+      <div><div class="qa-title">Analyze Audio</div><div class="qa-sub">Upload WAV/MP3 or record live from mic. Get score, AI explanation, spectrogram.</div></div>
+    </a>
+    <a class="qa" href="/pages/history.html">
+      <span class="qa-icon">📋</span>
+      <div><div class="qa-title">View History</div><div class="qa-sub">All past analyses stored in database. Click any row for full report.</div></div>
+    </a>
+    <a class="qa" href="/pages/alerts.html">
+      <span class="qa-icon">📳</span>
+      <div><div class="qa-title">Setup ntfy Alerts</div><div class="qa-sub">Get instant phone notifications even when screen is off — free, no account needed.</div></div>
+    </a>
   </div>
 
-  <!-- ══ HOW IT WORKS ══ -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-hd"><span class="card-title">HOW IT WORKS — 4 STEPS</span></div>
-    <div class="card-sub">From raw audio to threat verdict in under 10 seconds</div>
-    <div style="padding:14px">
-      <div class="how-grid">
-
-        <div class="how-step">
-          <div class="how-num"><div class="how-num-circle">1</div> INPUT</div>
-          <span class="how-icon">🎵</span>
-          <div class="how-title">Audio Input</div>
-          <div class="how-desc">Upload any audio file (WAV, MP3, FLAC, OGG, M4A, WebM) or record live from your microphone. The system supports continuous live monitoring in 10-second chunks.</div>
-        </div>
-
-        <div class="how-step">
-          <div class="how-num"><div class="how-num-circle">2</div> PROCESS</div>
-          <span class="how-icon">📊</span>
-          <div class="how-title">Spectrogram Conversion</div>
-          <div class="how-desc">Audio is converted to a Log-Mel Spectrogram using a 25ms Hanning window, 10ms hop, and 128 mel frequency bands. This turns sound into an image the AI can read.</div>
-        </div>
-
-        <div class="how-step">
-          <div class="how-num"><div class="how-num-circle">3</div> CLASSIFY</div>
-          <span class="how-icon">🤖</span>
-          <div class="how-title">AST Inference</div>
-          <div class="how-desc">The Audio Spectrogram Transformer (partially fine-tuned on threat sounds) classifies the audio across all 527 AudioSet categories using sigmoid probabilities — not softmax.</div>
-        </div>
-
-        <div class="how-step">
-          <div class="how-num"><div class="how-num-circle">4</div> DECIDE</div>
-          <span class="how-icon">⚡</span>
-          <div class="how-title">Threat Decision</div>
-          <div class="how-desc">Score_t(x) = max probability across the 5 threat classes. If score ≥ τ (0.75), or a threat class ranks in the top 5 predictions — THREAT is flagged and ntfy alert fires instantly.</div>
-        </div>
-
-      </div>
-
-      <!-- Pipeline visual -->
-      <div style="margin-top:10px">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--t3);margin-bottom:8px">PROCESSING PIPELINE</div>
-        <div class="pipeline">
-          <div class="pipe-step">
-            <div class="pipe-step-ic">🎙</div>
-            <div class="pipe-step-name">Audio File</div>
-            <div class="pipe-step-desc">WAV/MP3/OGG up to 60s</div>
-          </div>
-          <div class="pipe-arrow">→</div>
-          <div class="pipe-step">
-            <div class="pipe-step-ic">📈</div>
-            <div class="pipe-step-name">Resample</div>
-            <div class="pipe-step-desc">16 kHz mono normalised</div>
-          </div>
-          <div class="pipe-arrow">→</div>
-          <div class="pipe-step">
-            <div class="pipe-step-ic">🖼</div>
-            <div class="pipe-step-name">Log-Mel</div>
-            <div class="pipe-step-desc">128 bands · 25ms window</div>
-          </div>
-          <div class="pipe-arrow">→</div>
-          <div class="pipe-step">
-            <div class="pipe-step-ic">🧠</div>
-            <div class="pipe-step-name">AST Model</div>
-            <div class="pipe-step-desc">12 transformer layers</div>
-          </div>
-          <div class="pipe-arrow">→</div>
-          <div class="pipe-step">
-            <div class="pipe-step-ic">σ</div>
-            <div class="pipe-step-name">Sigmoid</div>
-            <div class="pipe-step-desc">527-class probabilities</div>
-          </div>
-          <div class="pipe-arrow">→</div>
-          <div class="pipe-step">
-            <div class="pipe-step-ic">⚖</div>
-            <div class="pipe-step-name">Score_t</div>
-            <div class="pipe-step-desc">max p(c|x) over C_t</div>
-          </div>
-          <div class="pipe-arrow">→</div>
-          <div class="pipe-step">
-            <div class="pipe-step-ic">🚨</div>
-            <div class="pipe-step-name">Alert</div>
-            <div class="pipe-step-desc">ntfy · WebSocket · DB</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ THREAT CLASSES + SCORE GUIDE ══ -->
-  <div class="db-two-col">
-
-    <!-- Threat Classes -->
-    <div class="card">
-      <div class="card-hd"><span class="card-title">THREAT CLASS SET — C_t</span></div>
-      <div class="card-sub">The 5 acoustic threat categories the model monitors</div>
-      <div class="threat-class-grid">
-        <div class="tc-card">
-          <span class="tc-icon">🔫</span>
-          <div class="tc-name">Gunshot</div>
-          <div class="tc-desc">Firearm discharge, rifle fire, machine gun, cap gun</div>
-        </div>
-        <div class="tc-card">
-          <span class="tc-icon">💥</span>
-          <div class="tc-name">Explosion</div>
-          <div class="tc-desc">Blast, dynamite, grenade, boom, burst</div>
-        </div>
-        <div class="tc-card">
-          <span class="tc-icon">🪟</span>
-          <div class="tc-name">Glass Break</div>
-          <div class="tc-desc">Shatter, smash, crash, breaking window</div>
-        </div>
-        <div class="tc-card">
-          <span class="tc-icon">😱</span>
-          <div class="tc-name">Scream</div>
-          <div class="tc-desc">Shriek, shout, yell, wail, distress call</div>
-        </div>
-        <div class="tc-card">
-          <span class="tc-icon">🚨</span>
-          <div class="tc-name">Siren</div>
-          <div class="tc-desc">Police, ambulance, fire truck, civil defense, alarm</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Score Guide -->
-    <div class="card">
-      <div class="card-hd"><span class="card-title">HOW TO READ THE THREAT SCORE</span></div>
-      <div class="card-sub">Score_t(x) = max probability across all 5 threat classes</div>
-      <div class="score-guide">
-        <div class="sg-card safe">
-          <div class="sg-range">0–29%</div>
-          <div class="sg-label">SAFE</div>
-          <div class="sg-desc">No threat class detected. Audio is likely speech, music, ambient noise, or other non-threatening sound.</div>
-        </div>
-        <div class="sg-card medium">
-          <div class="sg-range">30–74%</div>
-          <div class="sg-label">MEDIUM</div>
-          <div class="sg-desc">Possible threat pattern. Could be a muffled or distant threat sound, or an ambiguous recording. Manual review recommended.</div>
-        </div>
-        <div class="sg-card high">
-          <div class="sg-range">75–100%</div>
-          <div class="sg-label">HIGH ⚠</div>
-          <div class="sg-desc">Score_t ≥ τ (0.75). Strong match to a threat class. ntfy alert fires immediately. Treat as real threat until confirmed otherwise.</div>
-        </div>
-      </div>
-      <div style="padding:0 14px 12px">
-        <div style="font-size:9px;color:var(--t3);line-height:1.6;margin-top:2px">
-          ⓘ  Three detection rules run in parallel: <strong>Score threshold</strong> (score ≥ τ), <strong>Top-rank</strong> (threat class in top 5 with score &gt;0.15), and <strong>Top-2</strong> (threat class is #1 or #2 prediction with score &gt;0.10). Any one rule triggering fires an alert.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ READING RESULTS GUIDE + PAPER METRICS ══ -->
-  <div class="db-two-col">
-
-    <!-- Reading Results -->
-    <div class="card">
-      <div class="card-hd"><span class="card-title">UNDERSTANDING YOUR RESULTS</span></div>
-      <div class="card-sub">What each section in the Analyze page shows you</div>
-      <div class="rg-grid">
-        <div class="rg-item">
-          <div class="rg-title"><span class="rg-dot" style="background:#4361EE"></span>Threat Score Gauge</div>
-          <div class="rg-desc">The circular gauge shows Score_t — the max probability across all 5 threat classes. The τ marker at 75% is the paper-validated detection threshold.</div>
-        </div>
-        <div class="rg-item">
-          <div class="rg-title"><span class="rg-dot" style="background:#818cf8"></span>AI Explanation</div>
-          <div class="rg-desc">Claude Haiku analyses the result and tells you in plain English what was heard, whether it's dangerous, and what action to take.</div>
-        </div>
-        <div class="rg-item">
-          <div class="rg-title"><span class="rg-dot" style="background:#059669"></span>Log-Mel Spectrogram</div>
-          <div class="rg-desc">Visual representation of the audio. Bright bands at specific frequencies are the patterns the AI uses. Gunshots show sharp vertical lines; sirens show sweeping curves.</div>
-        </div>
-        <div class="rg-item">
-          <div class="rg-title"><span class="rg-dot" style="background:#d97706"></span>Temporal Segments</div>
-          <div class="rg-desc">The audio is split into 5 time windows and each is classified independently. This shows when in the recording the threat event occurred.</div>
-        </div>
-        <div class="rg-item">
-          <div class="rg-title"><span class="rg-dot" style="background:#dc2626"></span>Threat Class Bars</div>
-          <div class="rg-desc">Shows probability for each of the 5 threat classes (gunshot, explosion, glass, scream, siren). The highest bar drove the detection decision.</div>
-        </div>
-        <div class="rg-item">
-          <div class="rg-title"><span class="rg-dot" style="background:#94A3B8"></span>Top AudioSet Classes</div>
-          <div class="rg-desc">The top 12 predictions across all 527 AudioSet sound categories, sorted by confidence. Useful for understanding what non-threat sounds were present.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Paper Metrics -->
-    <div class="card">
-      <div class="card-hd"><span class="card-title">MODEL PERFORMANCE — PAPER RESULTS</span></div>
-      <div class="card-sub">Validated metrics from the PFT-AST research paper (Section 4.2)</div>
-      <div class="metrics-strip">
-        <div class="ms-item">
-          <div class="ms-val">0.88</div>
-          <div class="ms-lbl">Macro F1</div>
-        </div>
-        <div class="ms-item">
-          <div class="ms-val">0.962</div>
-          <div class="ms-lbl">AUC Score</div>
-        </div>
-        <div class="ms-item">
-          <div class="ms-val">98%</div>
-          <div class="ms-lbl">Recall</div>
-        </div>
-        <div class="ms-item">
-          <div class="ms-val">3.2%</div>
-          <div class="ms-lbl">False Alarm Rate</div>
-        </div>
-      </div>
-      <div style="padding:0 14px 12px;font-size:9px;color:var(--t3);line-height:1.7">
-        The model correctly identified <strong style="color:var(--t2)">3,868 out of 3,931</strong> real threat events in the test set.
-        Layers 1–6 of the transformer are <strong style="color:var(--t2)">frozen</strong> (preserving general audio features from AudioSet pre-training)
-        while layers 7–12 are <strong style="color:var(--t2)">fine-tuned</strong> on threat-specific datasets.
-      </div>
-      <div style="padding:0 14px 4px">
-        <div style="font-size:9px;letter-spacing:1.5px;color:var(--t3);margin-bottom:7px">TRAINING DATASETS</div>
-        <div class="dataset-pills">
-          <span class="dpill">FSD50K</span>
-          <span class="dpill">ESC-50</span>
-          <span class="dpill">UrbanSound8K</span>
-          <span class="dpill">AudioSet (base)</span>
-        </div>
-      </div>
-      <div style="padding:8px 14px 14px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div style="font-size:10px;color:var(--t2);padding:8px 10px;background:var(--bg2);border-radius:7px;border:1px solid var(--b1)">
-            <div style="font-size:8px;color:var(--t3);letter-spacing:1px;margin-bottom:3px">BASE MODEL</div>
-            MIT/ast-finetuned-audioset
-          </div>
-          <div style="font-size:10px;color:var(--t2);padding:8px 10px;background:var(--bg2);border-radius:7px;border:1px solid var(--b1)">
-            <div style="font-size:8px;color:var(--t3);letter-spacing:1px;margin-bottom:3px">THRESHOLD τ</div>
-            0.75 (paper) · 0.25 (base)
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ LIVE ANALYSIS PANELS (populated by WebSocket) ══ -->
-  <div style="font-size:9px;letter-spacing:2px;color:var(--t3);margin-bottom:8px;padding-left:2px">LIVE ANALYSIS — UPDATES AUTOMATICALLY WHEN ANY DEVICE SUBMITS AUDIO</div>
-
-  <div class="dash-grid" style="margin-bottom:12px">
+  <!-- ═══ LIVE ANALYSIS PANELS ═══ -->
+  <div class="sec-lbl">Live Analysis — auto-updates when any device submits audio</div>
+  <div class="dash-grid" style="margin-bottom:16px">
     <div class="card dg-g">
       <div class="card-hd"><span class="card-title">THREAT SCORE</span></div>
-      <div class="card-sub">Score_t(x) = max p(c|x) over C_t · τ = 0.75</div>
+      <div class="card-sub">Score_t(x) = max p(c|x) · τ = 0.75</div>
       <div class="gauge-wrap"><canvas id="gaugeC" width="160" height="160"></canvas><div class="gauge-mid"><div class="gauge-pct" id="gaugePct">—</div><div class="gauge-tau">τ = 0.75</div></div></div>
-      <div class="gauge-risk" id="gaugeRisk">WAITING FOR AUDIO</div>
+      <div class="gauge-risk" id="gaugeRisk">AWAITING AUDIO</div>
     </div>
     <div class="card dg-sp">
       <div class="card-hd"><span class="card-title">LOG-MEL SPECTROGRAM</span></div>
       <div class="card-sub">S(m,τ) = log(M(m,τ) + ε) · 128 mel bands</div>
-      <div class="spec-wrap">
-        <img id="specImg">
-        <div class="spec-empty" id="specEmpty">
-          <svg width="42" height="42" viewBox="0 0 42 42" fill="none" stroke="#1e3350" stroke-width="1.3"><rect x="3" y="10" width="36" height="22" rx="2"/><path d="M3 21h36M12 16v10M18 14v14M24 18v6M30 15v12"/></svg>
-          <p>Spectrogram appears here after analysis</p>
-        </div>
-      </div>
+      <div class="spec-wrap"><img id="specImg"><div class="spec-empty" id="specEmpty"><svg width="42" height="42" viewBox="0 0 42 42" fill="none" stroke="#1e3350" stroke-width="1.3"><rect x="3" y="10" width="36" height="22" rx="2"/><path d="M3 21h36M12 16v10M18 14v14M24 18v6M30 15v12"/></svg><p>Spectrogram appears after first analysis</p></div></div>
     </div>
     <div class="card dg-cl">
       <div class="card-hd"><span class="card-title">TOP AUDIOSET CLASSES</span></div>
-      <div class="card-sub">Sigmoid probabilities across all 527 sound categories</div>
-      <div class="cls-list" id="clsList"><div class="empty" style="padding:14px;font-size:10px;color:var(--t3)">Awaiting first analysis — submit audio on the Analyze page</div></div>
+      <div class="card-sub">Sigmoid probabilities across 527 sound categories</div>
+      <div class="cls-list" id="clsList"><div class="empty" style="padding:14px;font-size:10px;color:var(--t3)">Populated from last analysis · submit audio to update</div></div>
     </div>
     <div class="card dg-ch">
       <div class="card-hd"><span class="card-title">THREAT PROBABILITY TIMELINE</span></div>
-      <div class="card-sub">Frame-level confidence across 5 temporal segments</div>
+      <div class="card-sub">Confidence across 5 temporal segments</div>
       <div class="chart-wrap"><canvas id="probChart" height="90"></canvas></div>
     </div>
     <div class="card dg-t">
       <div class="card-hd"><span class="card-title">THREAT CLASS BREAKDOWN</span></div>
-      <div class="card-sub">Per-class probability · C_t = {gunshot, explosion, glass, scream, siren}</div>
-      <div class="thr-list" id="thrList"><div class="empty" style="padding:14px;font-size:10px;color:var(--t3)">Submit audio to see per-class threat probabilities</div></div>
+      <div class="card-sub">C_t = {gunshot, explosion, glass, scream, siren}</div>
+      <div class="thr-list" id="thrList"><div class="empty" style="padding:14px;font-size:10px;color:var(--t3)">Per-class probabilities appear here after analysis</div></div>
     </div>
     <div class="card dg-tl">
       <div class="card-hd"><span class="card-title">TEMPORAL SEGMENTS</span></div>
-      <div class="card-sub">5 independent frame classifications — shows when threat occurred</div>
-      <div class="tl-list" id="tlList"><div class="empty" style="padding:14px;font-size:10px;color:var(--t3)">Temporal breakdown appears after analysis</div></div>
+      <div class="card-sub">5 independent frame classifications · shows when threat occurred</div>
+      <div class="tl-list" id="tlList"><div class="empty" style="padding:14px;font-size:10px;color:var(--t3)">Temporal breakdown shows which moment in audio is suspicious</div></div>
     </div>
   </div>
 
-  <!-- LLM Context Verdict -->
-  <div class="card" id="contextVerdictCard" style="display:none;margin-bottom:12px"></div>
+  <!-- LLM verdict -->
+  <div class="card" id="contextVerdictCard" style="display:none;margin-bottom:16px"></div>
 
-  <!-- ══ LIVE FEED ══ -->
-  <div class="card" style="margin-bottom:14px">
+  <!-- ═══ LIVE FEED ═══ -->
+  <div class="sec-lbl">Live Analysis Feed</div>
+  <div class="card" style="margin-bottom:16px">
     <div class="feed-hd">
-      <div>
-        <div class="card-title">LIVE ANALYSIS FEED</div>
-        <div style="font-size:9px;color:var(--t4);margin-top:2px">Every submission from any connected device appears here in real-time via WebSocket</div>
-      </div>
+      <div><div class="card-title">RECENT SUBMISSIONS</div><div style="font-size:9px;color:var(--t4);margin-top:2px">Loaded from history · updates live via WebSocket · click row to view full report</div></div>
       <div class="feed-live"><span class="feed-ldot"></span><span id="feedCount">0 events</span></div>
     </div>
-    <div class="feed-list" id="feedList">
-      <div class="empty" style="padding:20px;font-size:10px;color:var(--t3);text-align:center">
-        No analyses yet — go to <a href="/pages/analyze.html" style="color:var(--teal)">Analyze Audio</a> and submit your first recording
+    <div class="feed-list" id="feedList"><div class="empty" style="padding:20px;text-align:center;font-size:10px;color:var(--t3)">No analyses yet — <a href="/pages/analyze.html" style="color:var(--teal)">upload audio to get started</a></div></div>
+  </div>
+
+  <!-- ═══ HOW IT WORKS ═══ -->
+  <div class="sec-lbl">How It Works</div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-hd"><span class="card-title">4-STEP DETECTION PIPELINE</span></div>
+    <div class="card-sub">From raw audio file to threat verdict — runs in under 10 seconds on CPU</div>
+    <div class="how-grid">
+      <div class="how-card">
+        <div class="how-num"><div class="how-num-badge">1</div><span class="how-step-lbl">INPUT</span></div>
+        <span class="how-icon">🎵</span>
+        <div class="how-title">Audio Input</div>
+        <div class="how-desc">Upload any file (WAV, MP3, FLAC, OGG, M4A, WebM) or record live from microphone. Supports continuous 10-second chunk monitoring for real-time surveillance.</div>
+      </div>
+      <div class="how-card">
+        <div class="how-num"><div class="how-num-badge">2</div><span class="how-step-lbl">PROCESS</span></div>
+        <span class="how-icon">📊</span>
+        <div class="how-title">Spectrogram Conversion</div>
+        <div class="how-desc">Audio is resampled to 16 kHz mono, then converted to a Log-Mel Spectrogram using a 25ms Hanning window, 10ms hop, and 128 mel frequency bands — turning sound into an image.</div>
+      </div>
+      <div class="how-card">
+        <div class="how-num"><div class="how-num-badge">3</div><span class="how-step-lbl">CLASSIFY</span></div>
+        <span class="how-icon">🤖</span>
+        <div class="how-title">AST Neural Network</div>
+        <div class="how-desc">The Audio Spectrogram Transformer (12 layers — first 6 frozen, last 6 fine-tuned on threat data) processes the spectrogram and outputs sigmoid probabilities for all 527 AudioSet classes.</div>
+      </div>
+      <div class="how-card">
+        <div class="how-num"><div class="how-num-badge">4</div><span class="how-step-lbl">DECIDE</span></div>
+        <span class="how-icon">⚡</span>
+        <div class="how-title">Threat Decision + Alert</div>
+        <div class="how-desc">Score_t(x) = max probability over 5 threat classes. If Score_t ≥ τ (0.75), or a threat class appears in top-5 predictions — THREAT is flagged, ntfy fires instantly, all devices are notified.</div>
+      </div>
+    </div>
+    <div style="padding:0 14px 4px;font-size:9px;letter-spacing:1.5px;color:var(--t3)">FULL PIPELINE</div>
+    <div class="pipeline">
+      <div class="ps"><div class="ps-ic">🎙</div><div class="ps-n">Audio</div><div class="ps-d">Any format</div></div>
+      <div class="pa">→</div>
+      <div class="ps"><div class="ps-ic">📈</div><div class="ps-n">Resample</div><div class="ps-d">16kHz mono</div></div>
+      <div class="pa">→</div>
+      <div class="ps"><div class="ps-ic">🖼</div><div class="ps-n">Log-Mel</div><div class="ps-d">128 bands</div></div>
+      <div class="pa">→</div>
+      <div class="ps"><div class="ps-ic">🧠</div><div class="ps-n">AST</div><div class="ps-d">12 layers</div></div>
+      <div class="pa">→</div>
+      <div class="ps"><div class="ps-ic">σ</div><div class="ps-n">Sigmoid</div><div class="ps-d">527 classes</div></div>
+      <div class="pa">→</div>
+      <div class="ps"><div class="ps-ic">⚖</div><div class="ps-n">Score_t</div><div class="ps-d">max over C_t</div></div>
+      <div class="pa">→</div>
+      <div class="ps"><div class="ps-ic">🚨</div><div class="ps-n">Alert</div><div class="ps-d">ntfy · WS · DB</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ THREAT CLASSES + SCORE GUIDE ═══ -->
+  <div class="info-2col">
+
+    <div class="card">
+      <div class="card-hd"><span class="card-title">THREAT CLASS SET — C_t</span></div>
+      <div class="card-sub">The 5 acoustic categories that trigger a threat alert</div>
+      <div class="tc-grid">
+        <div class="tc"><span class="tc-icon">🔫</span><div class="tc-name">Gunshot</div><div class="tc-desc">Firearm discharge, rifle, machine gun, fusillade</div></div>
+        <div class="tc"><span class="tc-icon">💥</span><div class="tc-name">Explosion</div><div class="tc-desc">Blast, dynamite, grenade, boom, burst</div></div>
+        <div class="tc"><span class="tc-icon">🪟</span><div class="tc-name">Glass Break</div><div class="tc-desc">Shatter, smash, crash, breaking window</div></div>
+        <div class="tc"><span class="tc-icon">😱</span><div class="tc-name">Scream</div><div class="tc-desc">Shriek, shout, yell, wail, distress</div></div>
+        <div class="tc"><span class="tc-icon">🚨</span><div class="tc-name">Siren</div><div class="tc-desc">Police, ambulance, fire truck, alarm</div></div>
+      </div>
+      <div style="padding:0 14px 12px;font-size:9px;color:var(--t3);line-height:1.6">
+        Each threat class maps to multiple AudioSet labels — e.g. "Gunshot" covers: gunshot, gunfire, machine gun, fusillade, artillery fire, cap gun, firearm, rifle, pistol.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="card-title">READING THE THREAT SCORE</span></div>
+      <div class="card-sub">Score_t(x) = maximum sigmoid probability across C_t</div>
+      <div class="sg-grid">
+        <div class="sg safe"><div class="sg-range">0–29%</div><div class="sg-lbl">SAFE ✓</div><div class="sg-desc">No threat class detected. Audio is speech, music, ambient noise, or other non-dangerous sound.</div></div>
+        <div class="sg med"><div class="sg-range">30–74%</div><div class="sg-lbl">MEDIUM ⚡</div><div class="sg-desc">Possible threat pattern. Muffled or distant threat sound, or ambiguous recording. Review manually.</div></div>
+        <div class="sg hi"><div class="sg-range">75–100%</div><div class="sg-lbl">HIGH ⚠</div><div class="sg-desc">Score_t ≥ τ (0.75). Strong threat match. ntfy alert fires instantly. Treat as real until confirmed safe.</div></div>
+      </div>
+      <div class="sg-note">
+        ⓘ <strong>3 detection rules run in parallel:</strong> (1) Score_t ≥ τ=0.75, (2) threat class in top-5 predictions with score &gt;0.15, (3) threat class is #1 or #2 prediction with score &gt;0.10. Any rule firing triggers an alert.
       </div>
     </div>
   </div>
 
-  <!-- ══ PAGES GUIDE ══ -->
+  <!-- ═══ UNDERSTANDING RESULTS + MODEL METRICS ═══ -->
+  <div class="info-2col">
+
+    <div class="card">
+      <div class="card-hd"><span class="card-title">UNDERSTANDING YOUR RESULTS</span></div>
+      <div class="card-sub">What each section on the Analyze page tells you</div>
+      <div class="rg-grid">
+        <div class="rg"><div class="rg-title"><span class="rg-dot" style="background:#4361EE"></span>Threat Score Gauge</div><div class="rg-desc">The circular dial shows Score_t — max probability across all 5 threat classes. The τ marker at 75% is the paper-validated detection threshold.</div></div>
+        <div class="rg"><div class="rg-title"><span class="rg-dot" style="background:#818cf8"></span>AI Explanation</div><div class="rg-desc">Claude Haiku analyses the result and explains in plain English what was heard, how dangerous it is, and what action to take right now.</div></div>
+        <div class="rg"><div class="rg-title"><span class="rg-dot" style="background:#059669"></span>Log-Mel Spectrogram</div><div class="rg-desc">Visual picture of the audio. Gunshots show sharp vertical lines; sirens show sweeping curves; explosions show wide energy bursts across all frequencies.</div></div>
+        <div class="rg"><div class="rg-title"><span class="rg-dot" style="background:#d97706"></span>Temporal Segments</div><div class="rg-desc">Audio split into 5 time windows — each classified independently. Shows exactly when in the recording the threatening sound occurred.</div></div>
+        <div class="rg"><div class="rg-title"><span class="rg-dot" style="background:#dc2626"></span>Threat Class Bars</div><div class="rg-desc">Per-class probability for all 5 threat types. The tallest bar shows which category drove the alert — e.g. "gunshot: 82%".</div></div>
+        <div class="rg"><div class="rg-title"><span class="rg-dot" style="background:#94A3B8"></span>Top AudioSet Classes</div><div class="rg-desc">Top 12 predictions across all 527 AudioSet sound categories. Useful for understanding what non-threat sounds were also present in the recording.</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="card-title">MODEL PERFORMANCE — PAPER RESULTS</span></div>
+      <div class="card-sub">Validated on Section 4.2 of the PFT-AST research paper</div>
+      <div class="ms-grid">
+        <div class="ms"><div class="ms-val">0.88</div><div class="ms-lbl">Macro F1</div></div>
+        <div class="ms"><div class="ms-val">0.962</div><div class="ms-lbl">AUC Score</div></div>
+        <div class="ms"><div class="ms-val">98%</div><div class="ms-lbl">Recall</div></div>
+        <div class="ms"><div class="ms-val">3.2%</div><div class="ms-lbl">False Alarm Rate</div></div>
+      </div>
+      <div style="padding:0 14px 10px;font-size:9px;color:var(--t3);line-height:1.7;border-top:1px solid var(--b1);margin-top:4px">
+        The model correctly identified <strong style="color:var(--t2)">3,868 of 3,931</strong> real threat events in the test set (recall = 98%).
+        Only <strong style="color:var(--t2)">3.2%</strong> of safe sounds were incorrectly flagged as threats (false alarm rate).<br><br>
+        Architecture: Layers 1–6 <strong style="color:var(--t2)">frozen</strong> (general AudioSet features preserved) · Layers 7–12 + classifier <strong style="color:var(--t2)">fine-tuned</strong> on threat datasets.
+      </div>
+      <div style="padding:0 14px 6px;font-size:9px;letter-spacing:1.5px;color:var(--t3)">TRAINING DATASETS</div>
+      <div class="dpills">
+        <span class="dp">FSD50K</span>
+        <span class="dp">ESC-50</span>
+        <span class="dp">UrbanSound8K</span>
+        <span class="dp">AudioSet (base pre-training)</span>
+      </div>
+      <div style="padding:0 14px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="font-size:10px;color:var(--t2);padding:8px 10px;background:var(--bg2);border-radius:7px;border:1px solid var(--b1)"><div style="font-size:8px;color:var(--t3);letter-spacing:1px;margin-bottom:3px">BASE MODEL</div>MIT/ast-finetuned-audioset</div>
+        <div style="font-size:10px;color:var(--t2);padding:8px 10px;background:var(--bg2);border-radius:7px;border:1px solid var(--b1)"><div style="font-size:8px;color:var(--t3);letter-spacing:1px;margin-bottom:3px">THRESHOLD τ</div>0.75 (fine-tuned) · 0.25 (base)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGES GUIDE ═══ -->
+  <div class="sec-lbl">App Pages</div>
   <div class="card" style="margin-bottom:14px">
-    <div class="card-hd"><span class="card-title">PAGES IN THIS APP</span></div>
-    <div class="card-sub">What each page does</div>
-    <div style="padding:12px 14px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      <a href="/pages/analyze.html" style="text-decoration:none;display:block;padding:12px;border-radius:9px;background:var(--bg2);border:1px solid var(--b1);transition:border-color .2s" onmouseover="this.style.borderColor='rgba(67,97,238,.35)'" onmouseout="this.style.borderColor=''">
-        <div style="font-size:18px;margin-bottom:7px">🎙</div>
-        <div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:4px">Analyze Audio</div>
-        <div style="font-size:9px;color:var(--t3);line-height:1.5">Upload a file or record live. Get full analysis: score, spectrogram, waveform, AI explanation, temporal breakdown.</div>
+    <div class="card-hd"><span class="card-title">WHAT EACH PAGE DOES</span></div>
+    <div class="card-sub">4 pages — click any card to navigate there</div>
+    <div class="pages-grid">
+      <a class="pg-card" href="/pages/analyze.html">
+        <div class="pg-icon">🎙</div>
+        <div class="pg-title">Analyze Audio</div>
+        <div class="pg-desc">Upload a file or record live. Get full analysis: threat score, AI explanation, spectrogram, waveform, temporal segments, top classes. Continuous live mode sends 10s chunks automatically.</div>
       </a>
-      <a href="/pages/history.html" style="text-decoration:none;display:block;padding:12px;border-radius:9px;background:var(--bg2);border:1px solid var(--b1);transition:border-color .2s" onmouseover="this.style.borderColor='rgba(67,97,238,.35)'" onmouseout="this.style.borderColor=''">
-        <div style="font-size:18px;margin-bottom:7px">📋</div>
-        <div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:4px">History</div>
-        <div style="font-size:9px;color:var(--t3);line-height:1.5">Browse all past analyses stored in the database. Click any row to see the full report with spectrogram and AI explanation.</div>
+      <a class="pg-card" href="/pages/history.html">
+        <div class="pg-icon">📋</div>
+        <div class="pg-title">History</div>
+        <div class="pg-desc">Browse every past analysis stored in the database (permanent, survives restarts). Click any row to see the full report — spectrogram, AI explanation, temporal breakdown, and all class scores.</div>
       </a>
-      <a href="/pages/alerts.html" style="text-decoration:none;display:block;padding:12px;border-radius:9px;background:var(--bg2);border:1px solid var(--b1);transition:border-color .2s" onmouseover="this.style.borderColor='rgba(67,97,238,.35)'" onmouseout="this.style.borderColor=''">
-        <div style="font-size:18px;margin-bottom:7px">📳</div>
-        <div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:4px">Alerts</div>
-        <div style="font-size:9px;color:var(--t3);line-height:1.5">Configure ntfy phone notifications. See live threat alerts via WebSocket and browse all historical threat events.</div>
+      <a class="pg-card" href="/pages/alerts.html">
+        <div class="pg-icon">📳</div>
+        <div class="pg-title">Alerts</div>
+        <div class="pg-desc">Configure ntfy phone notifications — get alerted even when your screen is off. Shows live WebSocket threat feed and full threat history. Includes a debug button to test if ntfy is working.</div>
       </a>
     </div>
   </div>
@@ -645,23 +440,9 @@
 </main>
 </div>
 
-<!-- FAB -->
 <button class="fab" onclick="location.href='/pages/analyze.html'" title="Analyze Audio">🎙</button>
-
-<!-- Loader -->
 <div class="loader" id="loader"><div class="loader-box"><div class="sonar"><div class="s-ring"></div><div class="s-ring"></div><div class="s-ring"></div><div class="s-core"></div></div><div class="loader-title">Analyzing with PFT-AST</div><div class="loader-msg" id="loaderMsg">Uploading audio...</div><div class="loader-timer" id="loaderTimer"></div></div></div>
-
-<!-- History modal -->
-<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()">
-  <div class="hist-modal-inner">
-    <div class="hist-modal-topbar">
-      <span style="font-size:13px;font-weight:700;color:var(--t1)">Full Analysis Report</span>
-      <button class="hist-modal-close" onclick="closeHistoryModal()">✕ Close</button>
-    </div>
-    <div class="hist-modal-body" id="histModalBody"></div>
-  </div>
-</div>
-
+<div class="hist-modal" id="histModal" onclick="if(event.target===this)closeHistoryModal()"><div class="hist-modal-inner"><div class="hist-modal-topbar"><span style="font-size:13px;font-weight:700;color:var(--t1)">Full Analysis Report</span><button class="hist-modal-close" onclick="closeHistoryModal()">✕ Close</button></div><div class="hist-modal-body" id="histModalBody"></div></div></div>
 <script src="/config.js"></script>
 <script src="/app.js"></script>
 <script>window.PAGE='dashboard'; initPage();</script>
